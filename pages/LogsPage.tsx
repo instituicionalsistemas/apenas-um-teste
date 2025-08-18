@@ -1,13 +1,71 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../hooks/useApp';
-import { LogType, User } from '../types';
+import { LogType, User, LogEntry } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+const LogMessageCell: React.FC<{ log: LogEntry; employees: User[]; companies: User[]; onPhotoClick: (src: string) => void; }> = ({ log, employees, companies, onPhotoClick }) => {
+    const fallbackUserIcon = 'https://edrrnawrhfhoynpiwqsc.supabase.co/storage/v1/object/public/imagenscientes/Imagens%20Score%20Inteligente/icon%20user.png';
+    const fallbackCompanyIcon = 'https://edrrnawrhfhoynpiwqsc.supabase.co/storage/v1/object/public/imagenscientes/Imagens%20Score%20Inteligente/icon%20user.png';
+
+    const { userName, companyName } = useMemo(() => {
+        const match = log.message.match(/Usuário "([^"]+)" da empresa "([^"]+)"/);
+        if (match) {
+            return { userName: match[1], companyName: match[2] };
+        }
+        const companyMatch = log.message.match(/enviado por (.+)\./);
+         if (companyMatch) {
+            return { userName: null, companyName: companyMatch[1] };
+        }
+        return { userName: null, companyName: null };
+    }, [log.message]);
+
+    const employee = useMemo(() => {
+        if (!userName) return null;
+        // Find employee by name and company for better accuracy
+        if (companyName) {
+            return employees.find(e => e.name === userName && e.companyName === companyName);
+        }
+        // Fallback for logs that might not have company name in a structured way
+        return employees.find(e => e.name === userName);
+    }, [employees, userName, companyName]);
+
+    const company = useMemo(() => {
+        if (!companyName) return null;
+        return companies.find(c => c.companyName === companyName);
+    }, [companies, companyName]);
+
+    return (
+        <div className="flex items-center gap-3">
+            {company && (
+                <img
+                    src={company.photoUrl || fallbackCompanyIcon}
+                    alt={`Logo ${company.companyName}`}
+                    className="h-10 w-10 rounded-full object-contain bg-dark-background p-0.5 border-2 border-dark-border flex-shrink-0 cursor-pointer transition-transform hover:scale-110"
+                    title={company.companyName}
+                    onClick={() => company.photoUrl && onPhotoClick(company.photoUrl)}
+                />
+            )}
+            {employee && (
+                 <img
+                    src={employee.photoUrl || fallbackUserIcon}
+                    alt={`Foto de ${employee.name}`}
+                    className="h-10 w-10 rounded-full object-cover border-2 border-gray-600 flex-shrink-0 cursor-pointer transition-transform hover:scale-110"
+                    title={employee.name}
+                    onClick={() => employee.photoUrl && onPhotoClick(employee.photoUrl)}
+                />
+            )}
+            <span>{log.message}</span>
+        </div>
+    );
+};
+
 
 const LogsPage: React.FC = () => {
     const { logs, currentUser, fetchLoginLogs, fetchApprovedUsersLogs, allRegisteredCompanies, allEmployees, fetchAllRegisteredCompanies, fetchAllEmployees } = useApp();
     const [logTypeFilter, setLogTypeFilter] = useState<LogType>(LogType.USER_APPROVAL);
     const [companyFilter, setCompanyFilter] = useState<string>('all');
     const [employeeFilter, setEmployeeFilter] = useState<string>('all');
+    const [photoModalSrc, setPhotoModalSrc] = useState<string | null>(null);
 
     // Fetch logs when filter changes
     useEffect(() => {
@@ -133,6 +191,23 @@ const LogsPage: React.FC = () => {
 
     return (
         <div className="container mx-auto">
+            {photoModalSrc && (
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-80 z-50 flex justify-center items-center p-4 cursor-pointer"
+                    onClick={() => setPhotoModalSrc(null)}
+                >
+                    <img 
+                        src={photoModalSrc} 
+                        alt="Visualização ampliada" 
+                        className="max-w-full max-h-full object-contain rounded-lg"
+                    />
+                    <button 
+                      onClick={() => setPhotoModalSrc(null)} 
+                      className="absolute top-4 right-4 text-white text-3xl font-bold"
+                      aria-label="Fechar imagem"
+                    >&times;</button>
+                </div>
+            )}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold">Registros de Atividades (Logs)</h1>
                 <div className="flex flex-wrap items-center justify-start sm:justify-end gap-x-6 gap-y-3">
@@ -230,7 +305,14 @@ const LogsPage: React.FC = () => {
                                         <td className="py-3 pr-2 whitespace-nowrap text-sm text-gray-400 font-mono">
                                             {new Date(log.timestamp).toLocaleString('pt-BR')}
                                         </td>
-                                        <td className="py-3 px-2 text-sm">{log.message}</td>
+                                        <td className="py-3 px-2 text-sm">
+                                            <LogMessageCell 
+                                                log={log} 
+                                                employees={allEmployees} 
+                                                companies={allRegisteredCompanies}
+                                                onPhotoClick={setPhotoModalSrc}
+                                            />
+                                        </td>
                                         {logTypeFilter === LogType.USER_APPROVAL && (
                                             <td className="py-3 pl-2 text-sm text-gray-300">{log.adminName || 'N/A'}</td>
                                         )}
