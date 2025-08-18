@@ -949,9 +949,10 @@ interface ResultsPanelProps {
     results: NeuroAnalysisResult[];
     isLoading: boolean;
     onViewResult: (result: NeuroAnalysisResult) => void;
+    companies?: User[];
 }
 
-const ResultsPanel: React.FC<ResultsPanelProps> = ({ title, results, isLoading, onViewResult }) => {
+const ResultsPanel: React.FC<ResultsPanelProps> = ({ title, results, isLoading, onViewResult, companies = [] }) => {
     if (isLoading) {
         return (
             <div className="text-center py-16">
@@ -976,36 +977,51 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ title, results, isLoading, 
         <div className="mt-6">
             <h2 className="text-2xl font-bold mb-6 text-cyan-400">{title}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {results.map(result => (
-                    <div 
-                        key={result.id} 
-                        className="bg-dark-card rounded-xl shadow-lg border border-dark-border flex flex-col text-left transition-all duration-300 hover:shadow-cyan-500/20 hover:-translate-y-1"
-                    >
-                        <div className="p-5 flex-grow">
-                            <div className="flex items-center gap-4 mb-4">
-                                {result.foto && (
-                                    <img src={result.foto} alt={result.nome} className="w-16 h-16 rounded-full object-cover border-2 border-cyan-400 flex-shrink-0" />
-                                )}
-                                <div className="min-w-0">
-                                    <h3 className="font-bold text-lg truncate" title={result.nome}>{result.nome}</h3>
-                                    <p className="text-sm text-gray-400">{result.empresa}</p>
+                {results.map(result => {
+                    const company = companies.find(c => c.companyName === result.empresa);
+                    const logoUrl = company?.photoUrl;
+
+                    return (
+                        <div 
+                            key={result.id} 
+                            className="bg-dark-card rounded-xl shadow-lg border border-dark-border flex flex-col text-left transition-all duration-300 hover:shadow-cyan-500/20 hover:-translate-y-1"
+                        >
+                            <div className="p-5 flex-grow">
+                                <div className="flex items-center gap-4 mb-4">
+                                    {result.foto ? ( // Employee has a specific photo in the result
+                                        <img src={result.foto} alt={result.nome} className="w-16 h-16 rounded-full object-cover border-2 border-cyan-400 flex-shrink-0" />
+                                    ) : logoUrl ? ( // Company result: use logo
+                                        <img src={logoUrl} alt={result.empresa} className="w-16 h-16 rounded-full object-contain bg-dark-background p-1 border-2 border-cyan-400 flex-shrink-0" />
+                                    ) : ( // Fallback for company without logo
+                                        <div className="w-16 h-16 rounded-full bg-dark-background flex items-center justify-center text-cyan-400 text-2xl font-bold flex-shrink-0 border-2 border-dark-border">
+                                            {result.empresa.charAt(0).toUpperCase()}
+                                        </div>
+                                    )}
+                                    <div className="min-w-0">
+                                        <h3 className="font-bold text-lg truncate" title={result.empresa}>{result.empresa}</h3>
+                                        {result.nome !== result.empresa ? (
+                                             <p className="text-sm text-gray-400">Enviado por: {result.nome}</p>
+                                        ) : (
+                                            <p className="text-sm text-gray-400">Resultado da Empresa</p>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="text-sm text-gray-400 space-y-1">
+                                    <p><strong>Categoria:</strong> {result.categoria || 'N/A'}</p>
+                                    <p><strong>Data:</strong> {result.data} às {result.horario}</p>
                                 </div>
                             </div>
-                            <div className="text-sm text-gray-400 space-y-1">
-                                <p><strong>Categoria:</strong> {result.categoria || 'N/A'}</p>
-                                <p><strong>Data:</strong> {result.data} às {result.horario}</p>
+                            <div className="bg-dark-border/30 rounded-b-xl mt-auto">
+                                <button 
+                                    onClick={() => onViewResult(result)}
+                                    className="w-full text-center px-5 py-3 text-sm font-semibold text-cyan-400 hover:text-white hover:bg-cyan-500/20 transition-colors"
+                                >
+                                    Ver Análise Completa
+                                </button>
                             </div>
                         </div>
-                        <div className="bg-dark-border/30 rounded-b-xl mt-auto">
-                            <button 
-                                onClick={() => onViewResult(result)}
-                                className="w-full text-center px-5 py-3 text-sm font-semibold text-cyan-400 hover:text-white hover:bg-cyan-500/20 transition-colors"
-                            >
-                                Ver Análise Completa
-                            </button>
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
@@ -1027,7 +1043,9 @@ const NeuroMapaPage: React.FC = () => {
         neuroAnalysisResults,
         companyNeuroAnalysisResults,
         fetchNeuroAnalysisResults,
-        fetchCompanyNeuroAnalysisResults 
+        fetchCompanyNeuroAnalysisResults,
+        allRegisteredCompanies,
+        fetchAllRegisteredCompanies
     } = useApp();
     const [isLoadingResults, setIsLoadingResults] = useState(false);
     const [viewingAnalysis, setViewingAnalysis] = useState<NeuroAnalysisResult | null>(null);
@@ -1211,9 +1229,14 @@ const NeuroMapaPage: React.FC = () => {
     }, [users]);
 
     useEffect(() => {
-        fetchNeuroData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); 
+        const loadInitialData = async () => {
+            await Promise.all([
+                fetchNeuroData(),
+                fetchAllRegisteredCompanies()
+            ]);
+        };
+        loadInitialData();
+    }, [fetchNeuroData, fetchAllRegisteredCompanies]);
     
     useEffect(() => {
         const fetchResults = async () => {
@@ -1643,6 +1666,7 @@ const NeuroMapaPage: React.FC = () => {
                         results={filteredCompanyResults} 
                         isLoading={isLoadingResults} 
                         onViewResult={setViewingAnalysis} 
+                        companies={allRegisteredCompanies}
                     />
                 </div>
             )}

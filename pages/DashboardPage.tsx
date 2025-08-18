@@ -1110,7 +1110,10 @@ const DashboardPage: React.FC = () => {
     }, [activeTab, currentUser, neuroCategories.length, fetchNeuroData, fetchNeuroAnalysisResults, fetchCompanyNeuroAnalysisResults, fetchNeuroSubmissions]);
 
     useEffect(() => {
-        if ((activeTab === 'companies' || activeTab === 'comparativos') && currentUser?.role === UserRole.ADMIN) {
+        if (
+            activeTab === 'analysis' || 
+            ((activeTab === 'companies' || activeTab === 'comparativos') && currentUser?.role === UserRole.ADMIN)
+        ) {
             fetchAllRegisteredCompanies();
         }
     }, [activeTab, currentUser, fetchAllRegisteredCompanies]);
@@ -1566,13 +1569,28 @@ const DashboardPage: React.FC = () => {
                             <div key={companyName}>
                                 <h2 className="text-2xl font-bold mb-6 pb-2 border-b-2 border-cyan-500">{companyName}</h2>
                                 <div className="space-y-8">
-                                    {analyses.company.map(analysis => (
-                                        <div key={analysis.id} className="p-6 bg-gradient-to-r from-blue-900 via-indigo-900 to-purple-900 rounded-xl border border-blue-700 text-center">
-                                            <h3 className="text-xl font-bold text-white mb-2">Análise da Empresa: {analysis.empresa}</h3>
-                                            <p className="text-gray-300 mb-4">Veja o resultado consolidado do NeuroMapa.</p>
-                                            <button onClick={() => setViewingAnalysis(analysis)} className="px-6 py-2 font-bold text-gray-900 bg-gradient-to-r from-cyan-400 to-blue-400 rounded-lg shadow-lg hover:from-cyan-300 hover:to-blue-300 transition-all transform hover:scale-105">Ver Análise da Empresa</button>
-                                        </div>
-                                    ))}
+                                    {analyses.company.map(analysis => {
+                                        const company = allRegisteredCompanies.find(c => c.companyName === analysis.empresa);
+                                        const logoUrl = company?.photoUrl;
+                                        return (
+                                            <div key={analysis.id} className="bg-dark-card p-6 rounded-xl border border-dark-border flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
+                                                {logoUrl ? (
+                                                    <img src={logoUrl} alt={analysis.empresa} className="w-24 h-24 rounded-full object-contain bg-dark-background p-1 border-2 border-cyan-400 flex-shrink-0" />
+                                                ) : (
+                                                    <div className="w-24 h-24 rounded-full bg-dark-background flex items-center justify-center text-cyan-400 text-4xl font-bold flex-shrink-0 border-2 border-dark-border">
+                                                        {analysis.empresa.charAt(0).toUpperCase()}
+                                                    </div>
+                                                )}
+                                                <div className="flex-grow">
+                                                    <h3 className="text-xl font-bold text-white mb-2">Análise da Empresa</h3>
+                                                    <p className="text-gray-300 mb-4">Veja o resultado consolidado do NeuroMapa.</p>
+                                                </div>
+                                                <button onClick={() => setViewingAnalysis(analysis)} className="px-6 py-2 font-bold text-gray-900 bg-gradient-to-r from-cyan-400 to-blue-400 rounded-lg shadow-lg hover:from-cyan-300 hover:to-blue-300 transition-all transform hover:scale-105 shrink-0">
+                                                    Ver Análise
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
                                     {analyses.employee.length > 0 && (
                                         <div>
                                             <h3 className="text-xl font-semibold mb-4 text-cyan-400/80">Análises da Equipe</h3>
@@ -1597,13 +1615,28 @@ const DashboardPage: React.FC = () => {
 
         return (
             <div className="space-y-8">
-                {filteredCompanyAnalyses.map(analysis => (
-                    <div key={analysis.id} className="p-6 bg-gradient-to-r from-blue-900 via-indigo-900 to-purple-900 rounded-xl border border-blue-700 text-center">
-                        <h3 className="text-xl font-bold text-white mb-2">Análise da Empresa: {analysis.empresa}</h3>
-                        <p className="text-gray-300 mb-4">Veja o resultado consolidado do NeuroMapa para a empresa.</p>
-                        <button onClick={() => setViewingAnalysis(analysis)} className="px-6 py-2 font-bold text-gray-900 bg-gradient-to-r from-cyan-400 to-blue-400 rounded-lg shadow-lg hover:from-cyan-300 hover:to-blue-300 transition-all transform hover:scale-105">Ver Análise da Empresa</button>
-                    </div>
-                ))}
+                {filteredCompanyAnalyses.map(analysis => {
+                    const company = allRegisteredCompanies.find(c => c.companyName === analysis.empresa);
+                    const logoUrl = company?.photoUrl;
+                    return (
+                        <div key={analysis.id} className="bg-dark-card p-6 rounded-xl border border-dark-border flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
+                            {logoUrl ? (
+                                <img src={logoUrl} alt={analysis.empresa} className="w-24 h-24 rounded-full object-contain bg-dark-background p-1 border-2 border-cyan-400 flex-shrink-0" />
+                            ) : (
+                                <div className="w-24 h-24 rounded-full bg-dark-background flex items-center justify-center text-cyan-400 text-4xl font-bold flex-shrink-0 border-2 border-dark-border">
+                                    {analysis.empresa.charAt(0).toUpperCase()}
+                                </div>
+                            )}
+                            <div className="flex-grow">
+                                <h3 className="text-xl font-bold text-white mb-2">Análise da Empresa: {analysis.empresa}</h3>
+                                <p className="text-gray-300 mb-4">Veja o resultado consolidado do NeuroMapa para a empresa.</p>
+                            </div>
+                            <button onClick={() => setViewingAnalysis(analysis)} className="px-6 py-2 font-bold text-gray-900 bg-gradient-to-r from-cyan-400 to-blue-400 rounded-lg shadow-lg hover:from-cyan-300 hover:to-blue-300 transition-all transform hover:scale-105 shrink-0">
+                                Ver Análise
+                            </button>
+                        </div>
+                    );
+                })}
                 {filteredEmployeeAnalyses.length > 0 && (
                      <div>
                         <h3 className="text-xl font-semibold mb-4 text-cyan-400/80">Análises da Equipe</h3>
