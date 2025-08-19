@@ -66,6 +66,8 @@ interface AppContextType {
   fetchOralTestResults: () => Promise<void>;
   startOralTest: (payload: any) => Promise<{ success: boolean; message?: string; }>;
   fetchAllRegisteredCompanies: () => Promise<void>;
+  updateUserIsActive: (userId: string, isActive: boolean) => Promise<{ success: boolean; message: string }>;
+  toggleEmployeeActiveStatus: (userToToggle: User, newIsActive: boolean) => Promise<{ success: boolean; message: string; }>;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -959,17 +961,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const apiData = text ? JSON.parse(text) : [];
         const mappedEmployees: User[] = Array.isArray(apiData)
             ? apiData.map((apiUser: any) => ({
-                id: `employee-api-${apiUser.id}`, 
-                name: apiUser.nome, 
-                companyName: apiUser.empresa, 
+                id: `employee-api-${apiUser.id}`,
+                name: apiUser.nome,
+                companyName: apiUser.empresa,
                 email: apiUser.email,
-                phone: apiUser.telefone, 
-                passwordHash: '', 
-                role: UserRole.EMPLOYEE, 
-                status: UserStatus.APPROVED, 
+                phone: apiUser.telefone,
+                passwordHash: '',
+                role: UserRole.EMPLOYEE,
+                status: UserStatus.APPROVED,
                 photoUrl: apiUser.foto,
                 position: apiUser.cargo,
-            })) 
+                isActive: apiUser.status === 'on',
+            }))
             : [];
         
         let finalEmployees = mappedEmployees;
@@ -1959,6 +1962,61 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           return { success: false, message: 'Ocorreu um erro de comunicação.' };
       }
   }, [fetchSegmentos]);
+  
+  const updateUserIsActive = useCallback(async (userId: string, isActive: boolean): Promise<{ success: boolean; message: string }> => {
+    // NOTE: This function currently only updates the local state.
+    // A real implementation would require a backend endpoint to persist this change.
+    console.log(`ADMIN ACTION: Toggling isActive for user ${userId} to ${isActive}`);
+    
+    const updateUserState = (user: User) => user.id === userId ? { ...user, isActive } : user;
+
+    setUsers(prev => prev.map(updateUserState));
+    setAllEmployees(prev => prev.map(updateUserState));
+    setAllRegisteredCompanies(prev => prev.map(updateUserState));
+
+    return { success: true, message: "Status de atividade atualizado com sucesso." };
+  }, []);
+
+  const toggleEmployeeActiveStatus = useCallback(async (userToToggle: User, newIsActive: boolean): Promise<{ success: boolean; message: string; }> => {
+    const apiIdMatch = userToToggle.id.match(/\d+$/);
+    if (!apiIdMatch) {
+      return { success: false, message: 'ID de funcionário inválido.' };
+    }
+    const apiId = apiIdMatch[0];
+
+    try {
+      const response = await fetch('https://webhook.triad3.io/webhook/onofffuncionarios', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          Id: parseInt(apiId),
+          nome: userToToggle.name,
+          telefone: userToToggle.phone,
+          empresa: userToToggle.companyName,
+          status: newIsActive ? 'on' : 'off',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.resposta === "Atualização efetuada com sucesso!") {
+        // Update local state on success
+        setAllEmployees(prevEmployees =>
+          prevEmployees.map(emp =>
+            emp.id === userToToggle.id ? { ...emp, isActive: newIsActive } : emp
+          )
+        );
+        return { success: true, message: data.resposta };
+      } else {
+        return { success: false, message: data.resposta || "Falha ao atualizar o status do funcionário." };
+      }
+    } catch (error) {
+      console.error('Toggle employee status API error:', error);
+      return { success: false, message: "Ocorreu um erro de comunicação." };
+    }
+  }, []);
 
   const contextValue = React.useMemo(() => ({
     currentUser, users, allEmployees, categories, segmentos, questions, submissions, employeeSubmissions, loading, logs,
@@ -1981,6 +2039,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     fetchOralTestResults,
     startOralTest,
     fetchAllRegisteredCompanies,
+    updateUserIsActive,
+    toggleEmployeeActiveStatus,
   }), [
     currentUser, users, allEmployees, categories, segmentos, questions, submissions, employeeSubmissions, loading, logs,
     neuroQuestions, neuroCategories, neuroSubmissions, neuroAnalysisResults, companyNeuroAnalysisResults,
@@ -2002,6 +2062,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     fetchOralTestResults,
     startOralTest,
     fetchAllRegisteredCompanies,
+    updateUserIsActive,
+    toggleEmployeeActiveStatus,
   ]);
 
   return (

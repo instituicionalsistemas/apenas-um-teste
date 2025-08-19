@@ -2,6 +2,16 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useApp } from '../hooks/useApp';
 import { UserRole, Submission, NeuroAnalysisResult, Question, AvailableOralTest, OralTestResult, User, LogEntry } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import ConfirmationModal from '../components/ConfirmationModal';
+
+const ToggleSwitch: React.FC<{ checked: boolean; onChange: () => void; disabled?: boolean; }> = ({ checked, onChange, disabled = false }) => {
+    return (
+        <label className="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" checked={checked} onChange={onChange} className="sr-only peer" disabled={disabled} />
+            <div className={`w-11 h-6 bg-gray-600 rounded-full peer peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600 ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}></div>
+        </label>
+    );
+};
 
 const MicrophoneIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0a5 5 0 01-5 5v2.93zM3 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17a1 1 0 102 0v-2.07A7.001 7.001 0 003 8z" clipRule="evenodd" /></svg>
@@ -694,7 +704,8 @@ const CompanyDetailModal: React.FC<{
     employees: User[];
     onClose: () => void;
     onPhotoClick: (src: string) => void;
-}> = ({ company, employees, onClose, onPhotoClick }) => {
+    onToggleIsActive: (userId: string, isActive: boolean) => void;
+}> = ({ company, employees, onClose, onPhotoClick, onToggleIsActive }) => {
     if (!company) return null;
 
     const companyEmployees = employees.filter(e => e.companyName === company.companyName);
@@ -724,7 +735,18 @@ const CompanyDetailModal: React.FC<{
                             className="w-16 h-16 rounded-full object-contain bg-dark-background p-1 border-2 border-dark-border"
                         />
                         <div>
-                            <h2 className="text-2xl font-bold text-cyan-400">{company.companyName}</h2>
+                            <div className="flex items-center gap-3">
+                                <h2 className="text-2xl font-bold text-cyan-400">{company.companyName}</h2>
+                                <div className="flex items-center gap-2 bg-dark-background p-1.5 rounded-full">
+                                    <ToggleSwitch
+                                        checked={company.isActive ?? true}
+                                        onChange={() => onToggleIsActive(company.id, !(company.isActive ?? true))}
+                                    />
+                                     <span className={`text-sm font-semibold w-16 text-left ${company.isActive ?? true ? 'text-green-400' : 'text-red-400'}`}>
+                                        {company.isActive ?? true ? 'Ativa' : 'Inativa'}
+                                    </span>
+                                </div>
+                            </div>
                             <p className="text-gray-400">Detalhes da Empresa</p>
                         </div>
                     </div>
@@ -770,16 +792,25 @@ const CompanyDetailModal: React.FC<{
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {companyEmployees.map(employee => (
-                                    <div key={employee.id} className="bg-dark-background p-3 rounded-lg border border-dark-border flex items-center gap-3">
-                                        <img 
-                                            src={employee.photoUrl || 'https://edrrnawrhfhoynpiwqsc.supabase.co/storage/v1/object/public/imagenscientes/Imagens%20Score%20Inteligente/icon%20user.png'} 
-                                            alt={employee.name} 
-                                            className="w-12 h-12 rounded-full object-cover border-2 border-gray-600 cursor-pointer transition-transform hover:scale-105"
-                                            onClick={() => employee.photoUrl && onPhotoClick(employee.photoUrl)}
-                                        />
-                                        <div className="min-w-0">
-                                            <p className="font-semibold text-dark-text truncate" title={employee.name}>{employee.name}</p>
-                                            <p className="text-xs text-cyan-400 truncate">{employee.position || 'Cargo não informado'}</p>
+                                    <div key={employee.id} className="bg-dark-background p-3 rounded-lg border border-dark-border flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <img 
+                                                src={employee.photoUrl || 'https://edrrnawrhfhoynpiwqsc.supabase.co/storage/v1/object/public/imagenscientes/Imagens%20Score%20Inteligente/icon%20user.png'} 
+                                                alt={employee.name} 
+                                                className="w-12 h-12 rounded-full object-cover border-2 border-gray-600 cursor-pointer transition-transform hover:scale-105"
+                                                onClick={() => employee.photoUrl && onPhotoClick(employee.photoUrl)}
+                                            />
+                                            <div className="min-w-0">
+                                                <p className="font-semibold text-dark-text truncate" title={employee.name}>{employee.name}</p>
+                                                <p className="text-xs text-cyan-400 truncate">{employee.position || 'Cargo não informado'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 shrink-0">
+                                            <div className={`h-3 w-3 rounded-full transition-colors ${employee.isActive ?? true ? 'bg-green-500 shadow-[0_0_6px_1px_theme(colors.green.400)]' : 'bg-red-500 shadow-[0_0_6px_1px_theme(colors.red.400)]'}`} title={employee.isActive ?? true ? 'Ativo' : 'Inativo'}></div>
+                                            <ToggleSwitch
+                                                checked={employee.isActive ?? true}
+                                                onChange={() => onToggleIsActive(employee.id, !(employee.isActive ?? true))}
+                                            />
                                         </div>
                                     </div>
                                 ))}
@@ -889,7 +920,8 @@ const DashboardPage: React.FC = () => {
         fetchNeuroAnalysisResults, fetchCompanyNeuroAnalysisResults, fetchNeuroData, neuroSubmissions,
         fetchNeuroSubmissions, oralTestResults, fetchOralTestResults,
         allEmployees, fetchAllEmployees, selectedCompany, selectCompany,
-        allRegisteredCompanies, fetchAllRegisteredCompanies
+        allRegisteredCompanies, fetchAllRegisteredCompanies,
+        updateUserIsActive, toggleEmployeeActiveStatus
     } = useApp();
     
     const [activeTab, setActiveTab] = useState<'scores' | 'analysis' | 'companies' | 'funcionarios' | 'oralTest' | 'comparativos'>('scores');
@@ -917,6 +949,12 @@ const DashboardPage: React.FC = () => {
     const [isCompanyOralTestResultsModalOpen, setIsCompanyOralTestResultsModalOpen] = useState(false);
     const [viewingResult, setViewingResult] = useState<AvailableOralTest | null>(null);
     
+    // Modal flow state
+    const [modalState, setModalState] = useState<{
+        type: 'idle' | 'confirmToggle' | 'loading' | 'result';
+        data?: any;
+    }>({ type: 'idle' });
+
     // START: Logic for 'Comparativos' tab, moved to top level
     const [comparisonType, setComparisonType] = useState<'companies' | 'employees'>('companies');
     const [selectedIdsForComparison, setSelectedIdsForComparison] = useState<Set<string>>(new Set());
@@ -1075,6 +1113,30 @@ const DashboardPage: React.FC = () => {
         return data;
     }, [selectedIdsForComparison, comparisonType, submissions, employeeSubmissions, categories, allRegisteredCompanies, allEmployees, questions]);
     // END: Logic for 'Comparativos' tab
+
+    const handleConfirmToggle = async () => {
+        if (modalState.type !== 'confirmToggle' || !modalState.data) return;
+        const { user, newIsActive } = modalState.data;
+      
+        setModalState({ type: 'loading' });
+        const result = await toggleEmployeeActiveStatus(user, newIsActive);
+        setModalState({ type: 'result', data: result });
+    };
+
+    const handleToggleIsActive = (userId: string, newIsActive: boolean) => {
+        const user = allEmployees.find(e => e.id === userId) || allRegisteredCompanies.find(c => c.id === userId);
+        if (!user) {
+            console.error("User not found for toggling status", userId);
+            return;
+        }
+        if (user.role === 'employee') {
+            // Open confirmation modal for employees
+            setModalState({ type: 'confirmToggle', data: { user, newIsActive } });
+        } else {
+            // Keep old behavior for companies
+            updateUserIsActive(userId, newIsActive);
+        }
+    };
 
     const canViewDetailedAnswers = useMemo(() => {
         if (!currentUser) return false;
@@ -1698,24 +1760,32 @@ const DashboardPage: React.FC = () => {
                 <div className="bg-dark-card p-6 rounded-xl shadow-lg border border-dark-border">
                     <h3 className="text-xl font-semibold mb-4">Lista de Empresas</h3>
                     {activeCompanies.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {activeCompanies.map(company => (
                                  <div 
                                      key={company.id} 
                                      onClick={() => setViewingCompany(company)}
-                                     className="bg-dark-background p-4 rounded-lg border border-dark-border flex items-center gap-4 cursor-pointer transition-all duration-300 hover:border-cyan-400/50 hover:-translate-y-1"
+                                     className="bg-dark-background p-4 rounded-lg border border-dark-border flex flex-col gap-3 cursor-pointer transition-all duration-300 hover:border-cyan-400/50 hover:-translate-y-1"
                                  >
-                                     <img 
-                                         src={company.photoUrl || 'https://edrrnawrhfhoynpiwqsc.supabase.co/storage/v1/object/public/imagenscientes/Imagens%20Score%20Inteligente/icon%20user.png'} 
-                                         alt={`Logo ${company.companyName}`}
-                                         className="w-16 h-16 rounded-full object-contain bg-dark-card p-1 border-2 border-dark-border flex-shrink-0"
-                                     />
-                                     <div className="min-w-0">
-                                         <p className="font-bold text-lg text-dark-text">{company.companyName}</p>
-                                         <p className="text-sm text-gray-400">
-                                             {employeeCounts[company.companyName] || 0} funcionário(s)
-                                         </p>
-                                     </div>
+                                    <div className="flex items-start gap-4 flex-grow">
+                                        <img 
+                                            src={company.photoUrl || 'https://edrrnawrhfhoynpiwqsc.supabase.co/storage/v1/object/public/imagenscientes/Imagens%20Score%20Inteligente/icon%20user.png'} 
+                                            alt={`Logo ${company.companyName}`}
+                                            className="w-16 h-16 rounded-full object-contain bg-dark-card p-1 border-2 border-dark-border flex-shrink-0"
+                                        />
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-lg text-dark-text">{company.companyName}</p>
+                                            <p className="text-sm text-gray-400">
+                                                {employeeCounts[company.companyName] || 0} funcionário(s)
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-auto pt-3 border-t border-dark-border/50 w-full">
+                                        <span className={`h-2.5 w-2.5 rounded-full ${company.isActive ?? true ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                        <span className={`text-xs font-medium ${company.isActive ?? true ? 'text-green-400' : 'text-red-400'}`}>
+                                            {company.isActive ?? true ? 'Ativa' : 'Inativa'}
+                                        </span>
+                                    </div>
                                  </div>
                             ))}
                         </div>
@@ -1773,59 +1843,6 @@ const DashboardPage: React.FC = () => {
                          <p className="text-center text-gray-400 py-8">Nenhum funcionário cadastrado para sua empresa.</p>
                     )}
                 </div>
-            </div>
-        );
-    };
-
-     const renderOralTestContent = () => {
-        const resultsToDisplay = employeeFilter === 'all'
-            ? oralTestResults
-            : oralTestResults.filter(r => r.email === employeeFilter);
-
-        if (isLoadingOralResults) {
-            return <div className="text-center py-12"><p>Carregando resultados da Prova Oral...</p></div>
-        }
-
-        if (resultsToDisplay.length === 0) {
-            return (
-                <div className="text-center py-12 sm:py-16 bg-dark-card rounded-xl shadow-lg border border-dark-border">
-                    <p className="text-lg text-gray-400">Nenhum resultado de Prova Oral encontrado para a seleção atual.</p>
-                </div>
-            );
-        }
-        
-        return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {resultsToDisplay.map(result => {
-                    const scoreAnterior = parseInt(result.score_anterior || '0', 10);
-                    const scoreAtual = parseInt(result.score_atual || '0', 10);
-                    return (
-                        <div 
-                            key={result.id} 
-                            className="bg-dark-background rounded-xl shadow-lg border border-dark-border flex flex-col text-left transition-all duration-300 hover:shadow-cyan-500/20 hover:-translate-y-1 cursor-pointer"
-                            onClick={() => setViewingResult(mapOralTestResultToAvailableOralTest(result))}
-                        >
-                           <div className="p-5 flex-grow">
-                                <div className="flex items-center gap-4 mb-4">
-                                    {result.foto && <img src={result.foto} alt={result.nome} className="w-16 h-16 rounded-full object-cover border-4 border-cyan-400 flex-shrink-0" />}
-                                    <div className="min-w-0">
-                                        <h2 className="text-xl font-bold text-dark-text truncate" title={result.nome}>{result.nome}</h2>
-                                        <p className="text-sm text-gray-400">{result.categoria || 'Prova Oral'}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center justify-between text-sm text-gray-400 mb-4 bg-dark-card p-2 rounded-lg">
-                                    <div className="flex items-center gap-2"><CalendarIcon className="h-4 w-4" /> <span>{result.data}</span></div>
-                                    <div className="font-semibold text-base text-gray-300">
-                                        {scoreAnterior} &rarr; <span className="text-green-400">{scoreAtual}</span>
-                                    </div>
-                                </div>
-                           </div>
-                            <div className="text-center bg-dark-border/30 px-5 py-3 text-sm font-semibold text-cyan-400 rounded-b-xl">
-                                Ver Detalhes
-                            </div>
-                        </div>
-                    );
-                })}
             </div>
         );
     };
@@ -1931,293 +1948,300 @@ const DashboardPage: React.FC = () => {
                             </div>
                         </div>
 
-                        {Object.entries(comparisonData.categories).map(([categoryName, data]) => (
-                            <div key={categoryName}>
-                                <h3 className="text-2xl font-semibold text-dark-text mb-6 text-center">Comparativo: {categoryName}</h3>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                                    {data.map(item => {
-                                        const maturity = getMaturityLevel(item.score, 100);
-                                        const chartData = [{ name: 'Score', value: item.score }, { name: 'Remaining', value: Math.max(0, 100 - item.score) }];
-                                        return (
-                                            <div key={item.name} className="bg-dark-background p-4 rounded-xl shadow-lg border border-dark-border flex flex-col items-center">
-                                                <h4 className="text-base font-semibold text-center text-cyan-400 mb-2 h-12 flex items-center justify-center" title={item.name}>{item.name}</h4>
-                                                <div style={{ width: '100%', height: 180, position: 'relative' }}>
-                                                    <ResponsiveContainer>
-                                                        <PieChart>
-                                                            <Pie data={chartData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={70} startAngle={90} endAngle={450} cornerRadius={5}>
-                                                                {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={[maturity.chartColor, '#374151'][index]} stroke="none" />)}
-                                                            </Pie>
-                                                        </PieChart>
-                                                    </ResponsiveContainer>
-                                                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                                        <span className="text-2xl sm:text-3xl font-bold">{item.score.toFixed(0)}%</span>
-                                                    </div>
-                                                </div>
-                                                <div className={`mt-2 text-center font-semibold p-2 rounded-lg w-full ${maturity.color}`}>
-                                                    {maturity.icon} {maturity.level}
+                    {Object.entries(comparisonData.categories).map(([categoryName, data]) => (
+                        <div key={categoryName}>
+                            <h3 className="text-2xl font-semibold text-dark-text mb-6 text-center">Comparativo: {categoryName}</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                {data.map(item => {
+                                    const maturity = getMaturityLevel(item.score, 100);
+                                    const chartData = [{ name: 'Score', value: item.score }, { name: 'Remaining', value: Math.max(0, 100 - item.score) }];
+                                    return (
+                                        <div key={item.name} className="bg-dark-background p-4 rounded-xl shadow-lg border border-dark-border flex flex-col items-center">
+                                            <h4 className="text-base font-semibold text-center text-cyan-400 mb-2 h-12 flex items-center justify-center" title={item.name}>{item.name}</h4>
+                                            <div style={{ width: '100%', height: 180, position: 'relative' }}>
+                                                <ResponsiveContainer>
+                                                    <PieChart>
+                                                        <Pie data={chartData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={70} startAngle={90} endAngle={450} cornerRadius={5}>
+                                                            {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={[maturity.chartColor, '#374151'][index]} stroke="none" />)}
+                                                        </Pie>
+                                                    </PieChart>
+                                                </ResponsiveContainer>
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                                    <span className="text-2xl sm:text-3xl font-bold">{item.score.toFixed(0)}%</span>
                                                 </div>
                                             </div>
-                                        );
-                                    })}
-                                </div>
+                                            <div className={`mt-2 text-center font-semibold p-2 rounded-lg w-full ${maturity.color}`}>
+                                                {maturity.icon} {maturity.level}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
-                        ))}
-                    </div>
+                        </div>
+                    ))}
+                </div>
 
-                    <div className="mt-12 pt-8 border-t border-dark-border">
-                        <h3 className="text-2xl font-semibold text-dark-text mb-6 text-center">
-                            Comparativo de Respostas
-                        </h3>
-                        <div className="space-y-8">
-                            {Object.entries(comparisonData.answersByCategory).map(([categoryName, questionsAndAnswers]) => (
-                            <div key={categoryName} className="bg-dark-background p-6 rounded-xl border border-dark-border">
-                                <h4 className="text-xl font-bold text-cyan-400 mb-4">{categoryName}</h4>
-                                <div className="space-y-6">
-                                {questionsAndAnswers.map((qa, index) => (
-                                    <div key={index} className="border-t border-dark-border/50 pt-4 first:border-t-0 first:pt-0">
-                                    <p className="font-semibold text-gray-300 mb-3">({index + 1}) {qa.question}</p>
-                                    <ul className="space-y-2 pl-4">
-                                        {qa.answers.map((ans, ansIndex) => (
-                                        <li key={ansIndex} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-4 gap-y-1 text-sm">
-                                            <span className="font-medium text-gray-400 truncate" title={ans.name}>{ans.name}:</span>
-                                            <span className="text-gray-200">{ans.answer}</span>
-                                        </li>
-                                        ))}
-                                    </ul>
-                                    </div>
+                <div className="mt-12 pt-8 border-t border-dark-border">
+                  <h3 className="text-2xl font-semibold text-dark-text mb-6 text-center">
+                    Comparativo de Respostas
+                  </h3>
+                  <div className="space-y-8">
+                    {Object.entries(comparisonData.answersByCategory).map(([categoryName, questionsAndAnswers]) => (
+                      <div key={categoryName} className="bg-dark-background p-6 rounded-xl border border-dark-border">
+                        <h4 className="text-xl font-bold text-cyan-400 mb-4">{categoryName}</h4>
+                        <div className="space-y-6">
+                          {questionsAndAnswers.map((qa, index) => (
+                            <div key={index} className="border-t border-dark-border/50 pt-4 first:border-t-0 first:pt-0">
+                              <p className="font-semibold text-gray-300 mb-3">({index + 1}) {qa.question}</p>
+                              <ul className="space-y-2 pl-4">
+                                {qa.answers.map((ans, ansIndex) => (
+                                  <li key={ansIndex} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-4 gap-y-1 text-sm">
+                                    <span className="font-medium text-gray-400 truncate" title={ans.name}>{ans.name}:</span>
+                                    <span className="text-gray-200">{ans.answer}</span>
+                                  </li>
                                 ))}
-                                </div>
+                              </ul>
                             </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+            </>
+        ) : (
+            <div className="text-center py-12 px-6 h-full flex flex-col justify-center items-center bg-dark-background rounded-lg border-2 border-dashed border-dark-border mt-6">
+                 <ChartBarIcon className="h-16 w-16 text-gray-500 mb-4" />
+                <h3 className="text-xl font-semibold text-gray-300">Selecione para Comparar</h3>
+                <p className="text-gray-400 mt-2">Escolha um ou mais {comparisonType === 'companies' ? 'empresas' : 'funcionários'} para visualizar os gráficos.</p>
+            </div>
+        )}
+    </div>
+  );};
+
+    const renderOralTestContent = () => {
+        if (!currentUser) return null;
+        
+        if (currentUser.role === UserRole.EMPLOYEE) {
+            return (
+                <div className="text-center py-12 sm:py-16 bg-dark-card rounded-xl shadow-lg border border-dark-border">
+                    <h2 className="text-2xl font-semibold text-dark-text">Acesse sua Prova Oral</h2>
+                    <p className="text-gray-400 mt-2 mb-6 max-w-lg mx-auto">Clique no botão abaixo para ver as provas disponíveis, em andamento ou os resultados das provas que você já completou.</p>
+                    <button onClick={() => setIsOralTestModalOpen(true)} className="px-6 py-3 font-bold text-white bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg shadow-lg hover:from-cyan-600 hover:to-blue-700 transition-all">
+                        Minhas Provas Orais
+                    </button>
+                </div>
+            );
+        }
+
+        if (currentUser.role === UserRole.COMPANY) {
+            return (
+                 <div className="text-center py-12 sm:py-16 bg-dark-card rounded-xl shadow-lg border border-dark-border">
+                    <h2 className="text-2xl font-semibold text-dark-text">Resultados da Prova Oral</h2>
+                    <p className="text-gray-400 mt-2 mb-6 max-w-lg mx-auto">Acompanhe os resultados das provas orais aplicadas aos funcionários da sua empresa.</p>
+                    <button onClick={() => setIsCompanyOralTestResultsModalOpen(true)} className="px-6 py-3 font-bold text-white bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg shadow-lg hover:from-cyan-600 hover:to-blue-700 transition-all">
+                        Ver Resultados da Empresa
+                    </button>
+                </div>
+            );
+        }
+        
+        if (currentUser.role === UserRole.ADMIN || (currentUser.role === UserRole.GROUP && selectedCompany)) {
+            const companyName = currentUser.role === 'admin' 
+                ? users.find(u => u.id === selectedUserId)?.companyName 
+                : selectedCompany;
+            
+            if (currentUser.role === 'admin' && selectedUserId === 'all-companies') {
+                return (
+                     <div className="text-center py-12 sm:py-16 bg-dark-card rounded-xl shadow-lg border border-dark-border">
+                        <h2 className="text-2xl font-semibold text-dark-text">Resultados da Prova Oral</h2>
+                        <p className="text-gray-400 mt-2 mb-6 max-w-lg mx-auto">Selecione uma empresa na visão geral para ver os resultados da prova oral.</p>
+                    </div>
+                )
+            }
+            
+            const resultsForCompany = oralTestResults.filter(r => r.empresa === companyName);
+
+            return (
+                <div className="bg-dark-card p-6 rounded-xl shadow-lg border border-dark-border">
+                    <h2 className="text-xl font-semibold mb-4">Resultados para: <span className="text-cyan-400">{companyName}</span></h2>
+                     {resultsForCompany.length === 0 ? (
+                        <p className="text-center py-8 text-gray-400">Nenhum resultado de prova oral encontrado para esta empresa.</p>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {resultsForCompany.map(result => (
+                                <div key={result.id} onClick={() => setViewingResult(mapOralTestResultToAvailableOralTest(result))} className="bg-dark-background p-4 rounded-lg border border-dark-border cursor-pointer hover:border-cyan-400 transition-colors">
+                                    <div className="flex items-center gap-4">
+                                        <img src={result.foto} alt={result.nome} className="w-12 h-12 rounded-full object-cover"/>
+                                        <div>
+                                            <p className="font-bold">{result.nome}</p>
+                                            <p className="text-xs text-gray-400">{result.categoria || 'Prova Oral'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="mt-3 pt-3 border-t border-dark-border text-sm text-center font-semibold text-gray-300">
+                                         Score: {result.score_anterior} &rarr; <span className="text-green-400">{result.score_atual}</span>
+                                    </div>
+                                </div>
                             ))}
                         </div>
-                    </div>
-                </>
-            ) : (
-                <div className="text-center py-12 px-6 h-full flex flex-col justify-center items-center bg-dark-background rounded-lg border-2 border-dashed border-dark-border mt-6">
-                     <ChartBarIcon className="h-16 w-16 text-gray-500 mb-4" />
-                    <h3 className="text-xl font-semibold text-gray-300">Selecione para Comparar</h3>
-                    <p className="text-gray-400 mt-2">Escolha um ou mais {comparisonType === 'companies' ? 'empresas' : 'funcionários'} para visualizar os gráficos e respostas comparativas.</p>
+                    )}
                 </div>
-            )}
-        </div>
-      );
-    }
+            )
+        }
+        
+        if (currentUser.role === UserRole.GROUP && !selectedCompany) {
+             const allGroupResults = oralTestResults.filter(r => currentUser.managedCompanies?.includes(r.empresa));
+             
+             return (
+                 <div className="bg-dark-card p-6 rounded-xl shadow-lg border border-dark-border">
+                     <h2 className="text-xl font-semibold mb-4">Resultados do Grupo: <span className="text-cyan-400">{currentUser.companyName}</span></h2>
+                     {isLoadingOralResults ? (
+                        <p className="text-center py-8 text-gray-400">Carregando resultados...</p>
+                     ) : allGroupResults.length === 0 ? (
+                        <p className="text-center py-8 text-gray-400">Nenhum resultado de prova oral encontrado para as empresas deste grupo.</p>
+                     ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {allGroupResults.map(result => (
+                                <div key={result.id} onClick={() => setViewingResult(mapOralTestResultToAvailableOralTest(result))} className="bg-dark-background p-4 rounded-lg border border-dark-border cursor-pointer hover:border-cyan-400 transition-colors">
+                                    <div className="flex items-center gap-4">
+                                        <img src={result.foto} alt={result.nome} className="w-12 h-12 rounded-full object-cover"/>
+                                        <div>
+                                            <p className="font-bold">{result.nome}</p>
+                                            <p className="text-xs text-gray-400">{result.empresa}</p>
+                                        </div>
+                                    </div>
+                                     <div className="mt-3 pt-3 border-t border-dark-border text-sm text-center font-semibold text-gray-300">
+                                         Score: {result.score_anterior} &rarr; <span className="text-green-400">{result.score_atual}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                     )}
+                 </div>
+            );
+        }
 
-
-    if (!currentUser) return null;
-
-    if (!hasAnySubmissions) {
-        return (
-            <div className="text-center py-12 sm:py-16 bg-dark-card rounded-xl shadow-lg border border-dark-border max-w-2xl mx-auto">
-                <h2 className="text-2xl font-bold mb-4">Bem-vindo(a) ao Score Inteligente!</h2>
-                <p className="text-lg text-gray-400 mb-6">
-                    Para visualizar seu painel de resultados, você precisa primeiro responder aos questionários.
-                </p>
-                <button 
-                    onClick={() => window.location.hash = '#questionnaire'} 
-                    className="px-8 py-3 text-lg font-bold text-white bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg shadow-lg hover:from-cyan-600 hover:to-emerald-700 transition-all"
-                >
-                    Iniciar Questionários
-                </button>
-            </div>
-        );
-    }
+        return null;
+    };
+    
+    const tabs = useMemo(() => [
+        { id: 'scores', label: 'Scores', roles: [UserRole.ADMIN, UserRole.COMPANY, UserRole.EMPLOYEE, UserRole.GROUP] },
+        { id: 'analysis', label: 'Análise NeuroMapa', roles: [UserRole.ADMIN, UserRole.COMPANY, UserRole.EMPLOYEE, UserRole.GROUP] },
+        { id: 'oralTest', label: 'Prova Oral', roles: [UserRole.ADMIN, UserRole.COMPANY, UserRole.EMPLOYEE, UserRole.GROUP] },
+        { id: 'funcionarios', label: 'Funcionários', roles: [UserRole.COMPANY, UserRole.GROUP] },
+        { id: 'companies', label: 'Empresas', roles: [UserRole.ADMIN] },
+        { id: 'comparativos', label: 'Comparativos', roles: [UserRole.ADMIN, UserRole.GROUP] }
+    ], []);
 
     return (
         <div className="container mx-auto">
-            <EmployeeOralTestModal isOpen={isOralTestModalOpen} onClose={() => setIsOralTestModalOpen(false)} />
-            <CompanyOralTestResultsModal 
-                isOpen={isCompanyOralTestResultsModalOpen}
-                onClose={() => setIsCompanyOralTestResultsModalOpen(false)}
-                onViewResult={(result) => setViewingResult(result)}
-            />
-            <AnalysisResultModal analysis={viewingAnalysis} onClose={() => setViewingAnalysis(null)} />
-            <ResultDetailModal result={viewingResult} onClose={() => setViewingResult(null)} />
-            <CompanyDetailModal 
-                company={viewingCompany} 
-                employees={allEmployees} 
-                onClose={() => setViewingCompany(null)} 
-                onPhotoClick={setPhotoModalSrc} 
-            />
+            {/* Modals */}
             {photoModalSrc && (
-                <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex justify-center items-center p-4 cursor-pointer" onClick={() => setPhotoModalSrc(null)}>
-                    <img src={photoModalSrc} alt="Visualização ampliada" className="max-w-full max-h-full object-contain rounded-lg" />
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-80 z-[100] flex justify-center items-center p-4 cursor-pointer"
+                    onClick={() => setPhotoModalSrc(null)}
+                >
+                    <img src={photoModalSrc} alt="Visualização ampliada" className="max-w-full max-h-full object-contain rounded-lg"/>
                     <button onClick={() => setPhotoModalSrc(null)} className="absolute top-4 right-4 text-white text-3xl font-bold" aria-label="Fechar imagem">&times;</button>
                 </div>
             )}
+            <AnalysisResultModal analysis={viewingAnalysis} onClose={() => setViewingAnalysis(null)} />
+            <CompanyDetailModal 
+                company={viewingCompany} 
+                employees={allEmployees}
+                onClose={() => setViewingCompany(null)} 
+                onPhotoClick={setPhotoModalSrc}
+                onToggleIsActive={handleToggleIsActive}
+            />
+            <EmployeeOralTestModal isOpen={isOralTestModalOpen} onClose={() => setIsOralTestModalOpen(false)} />
+            <CompanyOralTestResultsModal 
+                isOpen={isCompanyOralTestResultsModalOpen} 
+                onClose={() => setIsCompanyOralTestResultsModalOpen(false)} 
+                onViewResult={setViewingResult}
+            />
+             <ResultDetailModal result={viewingResult} onClose={() => setViewingResult(null)} />
+
+            {modalState.type === 'confirmToggle' && modalState.data && (
+                <ConfirmationModal
+                    isOpen={true}
+                    onClose={() => setModalState({ type: 'idle' })}
+                    onConfirm={handleConfirmToggle}
+                    title="Confirmar Alteração de Status"
+                    confirmButtonText={modalState.data.newIsActive ? "Ativar" : "Inativar"}
+                    confirmButtonClass={modalState.data.newIsActive ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"}
+                >
+                    <p>Tem certeza que deseja {modalState.data.newIsActive ? 'ativar' : 'inativar'} o funcionário <strong className="text-cyan-400">{modalState.data.user.name}</strong>?</p>
+                </ConfirmationModal>
+            )}
             
-            <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold">
-                       {currentUser.role === UserRole.GROUP && selectedCompany
-                        ? `Painel de Resultados: ${selectedCompany}`
-                        : 'Painel de Resultados'
-                       }
-                    </h1>
-                    {selectedEmployeeInfo && viewType === 'employee' && activeTab === 'scores' && (
-                        <div className="flex items-center gap-3 mt-2">
-                            {selectedEmployeeInfo.photoUrl && <img src={selectedEmployeeInfo.photoUrl} alt="Foto do funcionário" className="w-12 h-12 rounded-full object-cover cursor-pointer border-2 border-cyan-400" onClick={() => setPhotoModalSrc(selectedEmployeeInfo.photoUrl!)} />}
-                            <div>
-                                <span className="text-lg text-gray-300">{selectedEmployeeInfo.name}</span>
-                                {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.GROUP) && selectedEmployeeId !== 'all-employees' && selectedEmployeeInfo.companyName && <p className="text-sm text-gray-400">{selectedEmployeeInfo.companyName}</p>}
-                            </div>
-                        </div>
-                    )}
-                </div>
-                
-                <div className="flex items-center gap-2">
-                    {currentUser.role === UserRole.EMPLOYEE && (
-                        <button
-                            onClick={() => setIsOralTestModalOpen(true)}
-                            className="flex items-center gap-2 px-4 py-2 font-semibold text-white bg-dark-action rounded-lg hover:bg-dark-accent transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark-background focus:ring-dark-accent"
-                        >
-                            <MicrophoneIcon className="h-5 w-5" />
-                            <span>Prova Oral</span>
-                        </button>
-                    )}
-                    {(currentUser.role === UserRole.COMPANY || (currentUser.role === UserRole.GROUP && !selectedCompany)) && (
-                         <button
-                            onClick={() => setIsCompanyOralTestResultsModalOpen(true)}
-                            className="flex items-center gap-2 px-4 py-2 font-semibold text-white bg-dark-action rounded-lg hover:bg-dark-accent transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark-background focus:ring-dark-accent"
-                        >
-                            <DocumentTextIcon className="h-5 w-5" />
-                            <span>Resultados Prova Oral</span>
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            <div className="mb-8 flex flex-wrap border-b border-dark-border">
-                <button onClick={() => setActiveTab('scores')} className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'scores' ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-gray-400 hover:text-white'}`}>Scores</button>
-                <button onClick={() => setActiveTab('analysis')} className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'analysis' ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-gray-400 hover:text-white'}`}>Análises NeuroMapa</button>
-                {currentUser.role === UserRole.ADMIN && (
-                    <>
-                        <button onClick={() => setActiveTab('companies')} className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'companies' ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-gray-400 hover:text-white'}`}>Empresas</button>
-                        <button onClick={() => setActiveTab('comparativos')} className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'comparativos' ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-gray-400 hover:text-white'}`}>Comparativos</button>
-                    </>
-                )}
-                {(currentUser.role === UserRole.COMPANY || (currentUser.role === UserRole.GROUP && selectedCompany)) && (
-                    <button onClick={() => setActiveTab('funcionarios')} className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'funcionarios' ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-gray-400 hover:text-white'}`}>Funcionários</button>
-                )}
-                {currentUser.role === UserRole.GROUP && selectedCompany && (
-                     <button onClick={() => setActiveTab('oralTest')} className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'oralTest' ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-gray-400 hover:text-white'}`}>Resultados Prova Oral</button>
-                )}
-            </div>
-
-            {currentUser.role === UserRole.GROUP && selectedCompany && (
-                <div className="sticky top-16 z-30 bg-dark-background/80 backdrop-blur-sm py-4 mb-8 -mt-8">
-                    <div className="flex flex-wrap items-center gap-4 p-4 bg-dark-card rounded-xl border border-dark-border">
-                        <div className="flex items-center gap-2">
-                            <label htmlFor="group-company-select" className="text-sm font-medium shrink-0">Empresa:</label>
-                            <select 
-                                id="group-company-select" 
-                                value={selectedCompany || ''} 
-                                onChange={(e) => { selectCompany(e.target.value); setEmployeeFilter('all'); }} 
-                                className="p-2 border border-dark-border rounded-lg bg-dark-background focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                                {currentUser.managedCompanies?.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                        </div>
-
-                        {(activeTab === 'analysis' || activeTab === 'oralTest') && (
-                             <div className="flex items-center gap-2">
-                                <label htmlFor="group-employee-select" className="text-sm font-medium shrink-0">Funcionário:</label>
-                                <select 
-                                    id="group-employee-select" 
-                                    value={employeeFilter} 
-                                    onChange={(e) => setEmployeeFilter(e.target.value)} 
-                                    className="p-2 border border-dark-border rounded-lg bg-dark-background focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                >
-                                    <option value="all">Todos os Funcionários</option>
-                                    {allEmployees
-                                        .filter(e => e.companyName === selectedCompany)
-                                        .map(e => <option key={e.id} value={e.email}>{e.name}</option>)
-                                    }
-                                </select>
-                            </div>
-                        )}
+            {modalState.type === 'loading' && (
+                 <div className="fixed inset-0 bg-dark-background bg-opacity-90 z-50 flex flex-col justify-center items-center p-4">
+                    <div className="loader triangle"><svg viewBox="0 0 86 80"><polygon points="43 8 79 72 7 72"></polygon></svg></div>
+                 </div>
+            )}
+            
+            {modalState.type === 'result' && modalState.data && (
+                <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex justify-center items-center p-4">
+                    <div className="bg-dark-card rounded-xl p-6 text-center">
+                        <p className={modalState.data.success ? 'text-green-400' : 'text-red-400'}>{modalState.data.message}</p>
+                        <button onClick={() => setModalState({ type: 'idle' })} className="mt-4 px-4 py-2 bg-cyan-500 text-white rounded-lg">OK</button>
                     </div>
                 </div>
             )}
-            
-            {activeTab === 'scores' && (
-                <div className="space-y-8">
-                     <div className="flex flex-wrap items-center gap-4 p-4 bg-dark-card rounded-xl border border-dark-border">
-                        {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.COMPANY || currentUser.role === UserRole.GROUP) && (
-                             <div className="flex items-center bg-dark-background p-1 rounded-full border border-dark-border">
-                                <button onClick={() => setViewType('corporate')} className={`px-3 py-1 text-sm font-semibold rounded-full transition-all duration-300 ${viewType === 'corporate' ? 'bg-cyan-500 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}>Corporativo</button>
-                                <button onClick={() => setViewType('employee')} className={`px-3 py-1 text-sm font-semibold rounded-full transition-all duration-300 ${viewType === 'employee' ? 'bg-cyan-500 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}>Funcionários</button>
-                            </div>
-                        )}
-                        {currentUser.role === UserRole.ADMIN && (
-                            <div className="flex items-center gap-2"><label htmlFor="company-select" className="text-sm font-medium shrink-0">Empresa:</label><select id="company-select" value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} className="p-2 border border-dark-border rounded-lg bg-dark-background focus:outline-none focus:ring-2 focus:ring-blue-500"><option value="all-companies">Todas as Empresas</option>{companyList.map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}</select></div>
-                        )}
-                        {viewType === 'employee' && employeeList.length > 0 && (
-                            <div className="flex items-center gap-2"><label htmlFor="employee-select" className="text-sm font-medium shrink-0">Funcionário:</label><select id="employee-select" value={selectedEmployeeId} onChange={(e) => setSelectedEmployeeId(e.target.value)} className="p-2 border border-dark-border rounded-lg bg-dark-background focus:outline-none focus:ring-2 focus:ring-blue-500"><option value="all-employees">Visão Geral da Equipe</option>{employeeList.map(e => <option key={e.userId} value={e.userId}>{e.userName}</option>)}</select></div>
-                        )}
-                        {completedCategories.length > 0 && selectedEmployeeId !== 'all-employees' && (
-                             <div className="flex items-center gap-2"><label htmlFor="category-select" className="text-sm font-medium shrink-0">Análise:</label><select id="category-select" value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)} className="p-2 border border-dark-border rounded-lg bg-dark-background focus:outline-none focus:ring-2 focus:ring-blue-500"><option value="" disabled>-- Selecione --</option>{completedCategories.length > 1 && <option value="compare-all">Visão Comparativa</option>}<option value="all-categories">Resultado Geral</option>{completedCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                        )}
-                    </div>
-                    {renderScoresContent()}
-                </div>
-            )}
 
-            {activeTab === 'analysis' && (
-                 <div className="space-y-8">
-                    {currentUser.role === UserRole.ADMIN && (
-                         <div className="flex flex-wrap items-center gap-4 p-4 bg-dark-card rounded-xl border border-dark-border">
+
+            {/* Page Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+                <h1 className="text-2xl sm:text-3xl font-bold">
+                    Painel 
+                    {currentUser?.role === 'admin' && ' (Admin)'}
+                    {currentUser?.role === 'group' && selectedCompany && ` - ${selectedCompany}`}
+                </h1>
+                {/* Admin/Group/Company Controls */}
+                {(currentUser?.role === 'admin' || currentUser?.role === 'group' || currentUser?.role === 'company') && (
+                    <div className="flex flex-wrap items-center justify-start sm:justify-end gap-x-6 gap-y-3">
+                        {currentUser.role === 'admin' && (
                             <div className="flex items-center gap-2">
-                                <label htmlFor="company-analysis-select" className="text-sm font-medium shrink-0">Empresa:</label>
-                                <select
-                                    id="company-analysis-select"
-                                    value={selectedUserId}
-                                    onChange={(e) => setSelectedUserId(e.target.value)}
-                                    className="p-2 border border-dark-border rounded-lg bg-dark-background focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                >
-                                    <option value="all-companies">Todas as Empresas</option>
-                                    {companyList.map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}
+                                <label htmlFor="user-select" className="text-sm font-medium shrink-0">Visualizando:</label>
+                                <select id="user-select" value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)} className="p-2 border border-dark-border rounded-lg bg-dark-card focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="all-companies">Todas as Empresas (Visão Geral)</option>
+                                    {companyList.map(u => <option key={u.id} value={u.id}>{u.companyName}</option>)}
                                 </select>
                             </div>
-                             {selectedUserId !== 'all-companies' && companyList.find(c => c.id === selectedUserId) && (
-                                <>
-                                    <div className="flex items-center bg-dark-background p-1 rounded-full border border-dark-border">
-                                        <button onClick={() => setAnalysisViewType('company')} className={`px-3 py-1 text-sm font-semibold rounded-full transition-all duration-300 ${analysisViewType === 'company' ? 'bg-cyan-500 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}>Empresa</button>
-                                        <button onClick={() => setAnalysisViewType('employee')} className={`px-3 py-1 text-sm font-semibold rounded-full transition-all duration-300 ${analysisViewType === 'employee' ? 'bg-cyan-500 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}>Funcionários</button>
-                                    </div>
-                                    {analysisViewType === 'employee' && analysisEmployeeList.length > 0 && (
-                                        <div className="flex items-center gap-2">
-                                            <label htmlFor="employee-analysis-select" className="text-sm font-medium shrink-0">Funcionário:</label>
-                                            <select
-                                                id="employee-analysis-select"
-                                                value={selectedEmployeeAnalysisId}
-                                                onChange={(e) => setSelectedEmployeeAnalysisId(e.target.value)}
-                                                className="p-2 border border-dark-border rounded-lg bg-dark-background focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            >
-                                                <option value="all">Todos os Funcionários</option>
-                                                {analysisEmployeeList.map(e => <option key={e.email} value={e.email}>{e.name}</option>)}
-                                            </select>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-                        </div>
-                    )}
-                    {renderAnalysisContent()}
-                </div>
-            )}
-            {activeTab === 'companies' && currentUser.role === UserRole.ADMIN && (
-                renderCompaniesContent()
-            )}
-             {activeTab === 'comparativos' && currentUser.role === UserRole.ADMIN && (
-                renderComparativosContent()
-            )}
-            {activeTab === 'funcionarios' && (currentUser.role === UserRole.COMPANY || currentUser.role === UserRole.GROUP) && (
-                renderFuncionariosContent()
-            )}
-            {activeTab === 'oralTest' && currentUser.role === UserRole.GROUP && (
-                renderOralTestContent()
-            )}
+                        )}
+                        {(currentUser.role === 'admin' && selectedUserId !== 'all-companies') || currentUser.role === 'company' || (currentUser.role === 'group' && selectedCompany) ? (
+                            <div className="flex items-center gap-2">
+                                <label htmlFor="view-type-select" className="text-sm font-medium shrink-0">Tipo de Visão:</label>
+                                <div className="flex items-center bg-dark-background p-1 rounded-full border border-dark-border">
+                                    <button onClick={() => setViewType('corporate')} className={`px-3 py-1 text-xs font-semibold rounded-full transition-all ${viewType === 'corporate' ? 'bg-cyan-500 text-white shadow-md' : 'text-gray-400'}`}>Corporativa</button>
+                                    <button onClick={() => setViewType('employee')} className={`px-3 py-1 text-xs font-semibold rounded-full transition-all ${viewType === 'employee' ? 'bg-cyan-500 text-white shadow-md' : 'text-gray-400'}`}>Por Funcionário</button>
+                                </div>
+                            </div>
+                        ) : null}
+                    </div>
+                )}
+            </div>
+
+            {/* Tabs */}
+            <div className="mb-8 flex flex-wrap border-b border-dark-border">
+                {tabs.filter(tab => currentUser && tab.roles.includes(currentUser.role)).map(tab => (
+                    <button 
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id as any)}
+                        className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === tab.id ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* Tab Content */}
+            {activeTab === 'scores' && renderScoresContent()}
+            {activeTab === 'analysis' && renderAnalysisContent()}
+            {activeTab === 'companies' && renderCompaniesContent()}
+            {activeTab === 'funcionarios' && renderFuncionariosContent()}
+            {activeTab === 'oralTest' && renderOralTestContent()}
+            {activeTab === 'comparativos' && renderComparativosContent()}
         </div>
     );
 };

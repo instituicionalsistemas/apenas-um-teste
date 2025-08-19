@@ -20,6 +20,7 @@ export interface User {
   passwordHash: string;
   role: UserRole;
   status: UserStatus;
+  isActive?: boolean;
   photoUrl?: string;
   position?: string;
   managedCompanies?: string[];
