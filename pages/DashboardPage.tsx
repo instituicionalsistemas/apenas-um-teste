@@ -882,43 +882,6 @@ const QuestionAnswerList: React.FC<{ answers: { questionText: string; selectedAn
     );
 };
 
-const ComparisonChart: React.FC<{ title: string; data: { name: string; score: number }[] }> = ({ title, data }) => {
-    return (
-        <div className="bg-dark-background p-4 rounded-lg border border-dark-border">
-            <h4 className="text-lg font-semibold text-cyan-400 mb-4 text-center">{title}</h4>
-            <div style={{ width: '100%', height: 300 }}>
-                <ResponsiveContainer>
-                    <BarChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 80 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                        <XAxis
-                            dataKey="name"
-                            stroke="#9CA3AF"
-                            angle={-45}
-                            textAnchor="end"
-                            interval={0}
-                            height={100} 
-                            tick={{ fontSize: 11 }}
-                        />
-                        <YAxis stroke="#9CA3AF" domain={[0, 100]} unit="%" />
-                        <Tooltip
-                            contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151' }}
-                            labelStyle={{ color: '#9CA3AF' }}
-                            formatter={(value: number) => [`${value.toFixed(1)}%`, 'Score']}
-                        />
-                        <Bar dataKey="score" name="Score" radius={[4, 4, 0, 0]}>
-                            {data.map((entry, index) => {
-                                const maturity = getMaturityLevel(entry.score, 100);
-                                return <Cell key={`cell-${index}`} fill={maturity.chartColor} />;
-                            })}
-                        </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
-            </div>
-        </div>
-    );
-};
-
-
 const DashboardPage: React.FC = () => {
     const { 
         currentUser, submissions, users, fetchSubmissions, employeeSubmissions, fetchEmployeeScoresForAdmin, 
@@ -978,7 +941,7 @@ const DashboardPage: React.FC = () => {
     }, []);
 
     const companyOptionsForComparison = useMemo(() => allRegisteredCompanies
-        .map(c => ({ id: c.companyName, name: c.companyName, photoUrl: c.photoUrl }))
+        .map(c => ({ id: c.id, name: c.companyName, photoUrl: c.photoUrl }))
         .filter((value, index, self) => self.findIndex(v => v.name === value.name) === index)
         .sort((a, b) => a.name.localeCompare(b.name)),
         [allRegisteredCompanies]);
@@ -996,25 +959,37 @@ const DashboardPage: React.FC = () => {
     const comparisonData = useMemo(() => {
         if (selectedIdsForComparison.size < 1) return null;
   
-        const data: { overall: { name: string; score: number }[]; categories: Record<string, { name: string; score: number }[]> } = {
+        const data: {
+            overall: { name: string; score: number }[];
+            categories: Record<string, { name: string; score: number }[]>;
+            answersByCategory: Record<string, {
+                question: string;
+                answers: {
+                    name: string;
+                    answer: string;
+                }[];
+            }[]>;
+        } = {
             overall: [],
             categories: {},
+            answersByCategory: {},
         };
   
         const sourceSubmissions = comparisonType === 'companies' ? submissions : employeeSubmissions;
         const relevantCategories = categories.filter(c => sourceSubmissions.some(s => s.categoryId === c.id));
         
-        relevantCategories.forEach(cat => {
-            data.categories[cat.name] = [];
-        });
+        relevantCategories.forEach(cat => { data.categories[cat.name] = []; });
   
+        // Process Scores
         selectedIdsForComparison.forEach(id => {
             let name: string;
             let userSubs: Submission[];
             
             if (comparisonType === 'companies') {
-                name = id;
-                userSubs = sourceSubmissions.filter(s => s.companyName === id);
+                const company = allRegisteredCompanies.find(c => c.id === id);
+                if (!company) return;
+                name = company.companyName;
+                userSubs = sourceSubmissions.filter(s => s.companyName === name);
             } else {
                 const employee = allEmployees.find(e => e.id === id);
                 if (!employee) return;
@@ -1024,9 +999,7 @@ const DashboardPage: React.FC = () => {
   
             if (userSubs.length === 0) {
                  data.overall.push({ name, score: 0 });
-                 relevantCategories.forEach(cat => {
-                     data.categories[cat.name].push({ name, score: 0 });
-                 });
+                 relevantCategories.forEach(cat => { data.categories[cat.name].push({ name, score: 0 }); });
                 return;
             };
   
@@ -1042,12 +1015,65 @@ const DashboardPage: React.FC = () => {
                 data.categories[cat.name].push({ name, score: catScore });
             });
         });
+
+        // Process Answers
+        const answersByCategory: Record<string, { question: string; answers: { name: string; answer: string }[] }[]> = {};
+        const allQuestions = relevantCategories.flatMap(cat => questions.filter(q => q.categoryId === cat.id && sourceSubmissions.some(s => s.categoryId === cat.id)));
+        const uniqueQuestions = Array.from(new Map(allQuestions.map(q => [q.id, q])).values());
+
+        uniqueQuestions.forEach(q => {
+            const category = categories.find(c => c.id === q.categoryId);
+            if (!category) return;
+            
+            if (!answersByCategory[category.name]) {
+                answersByCategory[category.name] = [];
+            }
+
+            const questionEntry: { question: string; answers: { name: string; answer: string }[] } = {
+                question: q.text,
+                answers: []
+            };
+
+            selectedIdsForComparison.forEach(id => {
+                let name: string;
+                let userSubs: Submission[];
+                
+                if (comparisonType === 'companies') {
+                    const company = allRegisteredCompanies.find(c => c.id === id);
+                    if (!company) return;
+                    name = company.companyName;
+                    userSubs = sourceSubmissions.filter(s => s.companyName === name);
+                } else {
+                    const employee = allEmployees.find(e => e.id === id);
+                    if (!employee) return;
+                    name = `${employee.name} (${employee.companyName})`;
+                    userSubs = sourceSubmissions.filter(s => s.userName === employee.name && s.companyName === employee.companyName);
+                }
+
+                const catSub = userSubs.find(s => s.categoryId === q.categoryId);
+                let answerText = 'Não respondeu';
+
+                if (catSub && catSub.detailedAnswers) {
+                    const allQuestionsForCategory = questions.filter(ques => ques.categoryId === catSub.categoryId);
+                    const parsedAnswers = parseDetailedAnswers(catSub.detailedAnswers, allQuestionsForCategory);
+                    const foundAnswer = parsedAnswers.find(pa => pa.questionText === q.text);
+                    if (foundAnswer) {
+                        answerText = foundAnswer.selectedAnswerText;
+                    }
+                }
+                questionEntry.answers.push({ name, answer: answerText });
+            });
+
+            answersByCategory[category.name].push(questionEntry);
+        });
+        
+        data.answersByCategory = answersByCategory;
   
         data.overall.sort((a, b) => a.name.localeCompare(b.name));
         Object.values(data.categories).forEach(arr => arr.sort((a, b) => a.name.localeCompare(b.name)));
   
         return data;
-    }, [selectedIdsForComparison, comparisonType, submissions, employeeSubmissions, categories, allEmployees]);
+    }, [selectedIdsForComparison, comparisonType, submissions, employeeSubmissions, categories, allRegisteredCompanies, allEmployees, questions]);
     // END: Logic for 'Comparativos' tab
 
     const canViewDetailedAnswers = useMemo(() => {
@@ -1834,10 +1860,10 @@ const DashboardPage: React.FC = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mb-8 min-h-[150px]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8 max-h-80 overflow-y-auto pr-2">
               {itemsForSelectionComparativos.length > 0 ? itemsForSelectionComparativos.map(item => {
                   const isEmployee = 'role' in item;
-                  const id = isEmployee ? item.id : item.id;
+                  const id = item.id;
                   const name = isEmployee ? item.name : item.name;
                   const photoUrl = item.photoUrl;
                   const subtitle = isEmployee ? item.companyName : null;
@@ -1847,18 +1873,20 @@ const DashboardPage: React.FC = () => {
                     <div 
                       key={id}
                       onClick={() => handleSelectionChangeForComparison(id)}
-                      className={`relative bg-dark-background p-4 rounded-lg border-2 transition-all duration-200 cursor-pointer flex flex-col items-center text-center hover:-translate-y-1 group ${isSelected ? 'border-cyan-400' : 'border-dark-border hover:border-gray-600'}`}
+                      className={`relative bg-dark-background p-3 rounded-lg border-2 transition-all duration-200 cursor-pointer flex items-center gap-3 text-left hover:-translate-y-1 group ${isSelected ? 'border-cyan-400' : 'border-dark-border hover:border-gray-600'}`}
                     >
                       <img 
                           src={photoUrl || 'https://edrrnawrhfhoynpiwqsc.supabase.co/storage/v1/object/public/imagenscientes/Imagens%20Score%20Inteligente/icon%20user.png'}
                           alt={`Logo ${name}`}
-                          className={`w-20 h-20 rounded-full mb-3 border-2 transition-all duration-200 ${isEmployee ? 'object-cover' : 'object-contain bg-dark-card p-1'} ${isSelected ? 'border-cyan-400' : 'border-gray-700 group-hover:border-gray-500'}`}
+                          className={`w-12 h-12 rounded-full border-2 shrink-0 transition-all duration-200 ${isEmployee ? 'object-cover' : 'object-contain bg-dark-card p-1'} ${isSelected ? 'border-cyan-400' : 'border-gray-700 group-hover:border-gray-500'}`}
                       />
-                      <p className="font-semibold text-sm text-gray-200 flex-grow">{name}</p>
-                      {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
+                      <div className="min-w-0">
+                          <p className="font-semibold text-sm text-gray-200 truncate">{name}</p>
+                          {subtitle && <p className="text-xs text-gray-400 truncate">{subtitle}</p>}
+                      </div>
                       {isSelected && (
-                        <div className="absolute top-2 right-2 bg-cyan-500 text-white rounded-full p-0.5 shadow-lg">
-                          <CheckCircleIcon className="h-5 w-5" />
+                        <div className="absolute top-1 right-1 bg-cyan-500 text-white rounded-full p-0.5 shadow-lg">
+                          <CheckCircleIcon className="h-4 w-4" />
                         </div>
                       )}
                     </div>
@@ -1871,17 +1899,104 @@ const DashboardPage: React.FC = () => {
             </div>
 
             {comparisonData ? (
-                <div className="mt-10 pt-6 border-t border-dark-border space-y-8">
-                   <ComparisonChart title="Score Geral Comparativo" data={comparisonData.overall} />
-                   {Object.entries(comparisonData.categories).map(([categoryName, data]) => (
-                       <ComparisonChart key={categoryName} title={`Comparativo: ${categoryName}`} data={data} />
-                   ))}
-                </div>
+                <>
+                    <div className="mt-8 pt-6 border-t border-dark-border space-y-12">
+                        <div>
+                            <h3 className="text-2xl font-semibold text-dark-text mb-6 text-center">Score Geral Comparativo</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                {comparisonData.overall.map(item => {
+                                    const maturity = getMaturityLevel(item.score, 100);
+                                    const chartData = [{ name: 'Score', value: item.score }, { name: 'Remaining', value: Math.max(0, 100 - item.score) }];
+                                    return (
+                                        <div key={item.name} className="bg-dark-background p-4 rounded-xl shadow-lg border border-dark-border flex flex-col items-center">
+                                            <h4 className="text-base font-semibold text-center text-cyan-400 mb-2 h-12 flex items-center justify-center" title={item.name}>{item.name}</h4>
+                                            <div style={{ width: '100%', height: 180, position: 'relative' }}>
+                                                <ResponsiveContainer>
+                                                    <PieChart>
+                                                        <Pie data={chartData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={70} startAngle={90} endAngle={450} cornerRadius={5}>
+                                                            {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={[maturity.chartColor, '#374151'][index]} stroke="none" />)}
+                                                        </Pie>
+                                                    </PieChart>
+                                                </ResponsiveContainer>
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                                    <span className="text-2xl sm:text-3xl font-bold">{item.score.toFixed(0)}%</span>
+                                                </div>
+                                            </div>
+                                            <div className={`mt-2 text-center font-semibold p-2 rounded-lg w-full ${maturity.color}`}>
+                                                {maturity.icon} {maturity.level}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {Object.entries(comparisonData.categories).map(([categoryName, data]) => (
+                            <div key={categoryName}>
+                                <h3 className="text-2xl font-semibold text-dark-text mb-6 text-center">Comparativo: {categoryName}</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                    {data.map(item => {
+                                        const maturity = getMaturityLevel(item.score, 100);
+                                        const chartData = [{ name: 'Score', value: item.score }, { name: 'Remaining', value: Math.max(0, 100 - item.score) }];
+                                        return (
+                                            <div key={item.name} className="bg-dark-background p-4 rounded-xl shadow-lg border border-dark-border flex flex-col items-center">
+                                                <h4 className="text-base font-semibold text-center text-cyan-400 mb-2 h-12 flex items-center justify-center" title={item.name}>{item.name}</h4>
+                                                <div style={{ width: '100%', height: 180, position: 'relative' }}>
+                                                    <ResponsiveContainer>
+                                                        <PieChart>
+                                                            <Pie data={chartData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={70} startAngle={90} endAngle={450} cornerRadius={5}>
+                                                                {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={[maturity.chartColor, '#374151'][index]} stroke="none" />)}
+                                                            </Pie>
+                                                        </PieChart>
+                                                    </ResponsiveContainer>
+                                                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                                        <span className="text-2xl sm:text-3xl font-bold">{item.score.toFixed(0)}%</span>
+                                                    </div>
+                                                </div>
+                                                <div className={`mt-2 text-center font-semibold p-2 rounded-lg w-full ${maturity.color}`}>
+                                                    {maturity.icon} {maturity.level}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="mt-12 pt-8 border-t border-dark-border">
+                        <h3 className="text-2xl font-semibold text-dark-text mb-6 text-center">
+                            Comparativo de Respostas
+                        </h3>
+                        <div className="space-y-8">
+                            {Object.entries(comparisonData.answersByCategory).map(([categoryName, questionsAndAnswers]) => (
+                            <div key={categoryName} className="bg-dark-background p-6 rounded-xl border border-dark-border">
+                                <h4 className="text-xl font-bold text-cyan-400 mb-4">{categoryName}</h4>
+                                <div className="space-y-6">
+                                {questionsAndAnswers.map((qa, index) => (
+                                    <div key={index} className="border-t border-dark-border/50 pt-4 first:border-t-0 first:pt-0">
+                                    <p className="font-semibold text-gray-300 mb-3">({index + 1}) {qa.question}</p>
+                                    <ul className="space-y-2 pl-4">
+                                        {qa.answers.map((ans, ansIndex) => (
+                                        <li key={ansIndex} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-4 gap-y-1 text-sm">
+                                            <span className="font-medium text-gray-400 truncate" title={ans.name}>{ans.name}:</span>
+                                            <span className="text-gray-200">{ans.answer}</span>
+                                        </li>
+                                        ))}
+                                    </ul>
+                                    </div>
+                                ))}
+                                </div>
+                            </div>
+                            ))}
+                        </div>
+                    </div>
+                </>
             ) : (
-                <div className="text-center py-12 px-6 h-full flex flex-col justify-center items-center bg-dark-background rounded-lg border-2 border-dashed border-dark-border">
+                <div className="text-center py-12 px-6 h-full flex flex-col justify-center items-center bg-dark-background rounded-lg border-2 border-dashed border-dark-border mt-6">
                      <ChartBarIcon className="h-16 w-16 text-gray-500 mb-4" />
                     <h3 className="text-xl font-semibold text-gray-300">Selecione para Comparar</h3>
-                    <p className="text-gray-400 mt-2">Escolha um ou mais {comparisonType === 'companies' ? 'empresas' : 'funcionários'} para visualizar os gráficos comparativos.</p>
+                    <p className="text-gray-400 mt-2">Escolha um ou mais {comparisonType === 'companies' ? 'empresas' : 'funcionários'} para visualizar os gráficos e respostas comparativas.</p>
                 </div>
             )}
         </div>
