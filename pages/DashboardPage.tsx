@@ -2130,7 +2130,7 @@ const DashboardPage: React.FC = () => {
         { id: 'oralTest', label: 'Prova Oral', roles: [UserRole.ADMIN, UserRole.COMPANY, UserRole.EMPLOYEE, UserRole.GROUP] },
         { id: 'funcionarios', label: 'Funcionários', roles: [UserRole.COMPANY, UserRole.GROUP] },
         { id: 'companies', label: 'Empresas', roles: [UserRole.ADMIN] },
-        { id: 'comparativos', label: 'Comparativos', roles: [UserRole.ADMIN, UserRole.GROUP] }
+        { id: 'comparativos', label: 'Comparativos', roles: [UserRole.ADMIN] }
     ], []);
 
     return (

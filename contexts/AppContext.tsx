@@ -1014,6 +1014,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 approvedBy: apiCompany.aprovado_por || undefined,
                 approvalDate: apiCompany.data || undefined,
                 approvalTime: apiCompany.horario || undefined,
+                isActive: apiCompany.status === 'on',
             }));
             const uniqueCompanies = Array.from(new Map(mappedCompanies.map(item => [item.companyName, item])).values());
             setAllRegisteredCompanies(uniqueCompanies);
