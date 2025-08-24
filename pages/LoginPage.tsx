@@ -77,13 +77,10 @@ const brazilianStates = [
 
 
 const LoginPage: React.FC = () => {
-    const [view, setView] = useState<'login' | 'register-choice' | 'register-company' | 'register-employee' | 'admin'>('login');
+    const [view, setView] = useState<'login' | 'register-choice' | 'register-company' | 'register-employee'>('login');
     const [isLoggingIn, setIsLoggingIn] = useState(false);
     const [isRegistering, setIsRegistering] = useState(false);
     
-    // Login type
-    const [loginType, setLoginType] = useState<'company' | 'employee' | 'group'>('company');
-
     // Common fields
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -355,9 +352,9 @@ const LoginPage: React.FC = () => {
         setError('');
         setSuccess('');
 
-        if (view === 'login' || view === 'admin') {
+        if (view === 'login') {
             setIsLoggingIn(true);
-            const loginPromise = login(email, password, view === 'admin', loginType);
+            const loginPromise = login(email, password);
             const timerPromise = new Promise(resolve => setTimeout(resolve, 4000));
             const [loginResult] = await Promise.all([loginPromise, timerPromise]);
 
@@ -407,26 +404,6 @@ const LoginPage: React.FC = () => {
     const renderFormContent = () => {
         const filteredCities = cities.filter(city => city.nome.toLowerCase().includes(cidade.toLowerCase()));
         const filteredBairros = bairros.filter(bairroItem => bairroItem.toLowerCase().includes(bairro.toLowerCase()));
-
-        if (view === 'admin') {
-            return (
-                <>
-                    <h2 className="text-2xl font-bold text-dark-text text-center mb-4">Acesso do Administrador</h2>
-                    <form onSubmit={handleFormSubmit} className="space-y-4">
-                        <input name="email" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required className="w-full px-4 py-3 border border-dark-border rounded-lg bg-dark-card text-dark-text focus:ring-2 focus:ring-blue-500 focus:outline-none transition" placeholder="E-mail de administrador" />
-                        <div className="relative">
-                            <input name="password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required className="w-full px-4 py-3 border border-dark-border rounded-lg bg-dark-card text-dark-text focus:ring-2 focus:ring-blue-500 focus:outline-none transition pr-10" placeholder="Senha de administrador" />
-                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-3 flex items-center" aria-label="Toggle password visibility">{showPassword ? <EyeOffIcon /> : <EyeIcon />}</button>
-                        </div>
-                        {error && <p className="text-sm text-red-500 text-center">{error}</p>}
-                        <button type="submit" className="w-full flex justify-center py-3 px-4 border border-transparent text-base font-semibold rounded-lg text-white bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark-card focus:ring-red-500 transition-all duration-300 ease-in-out">Entrar como Admin</button>
-                    </form>
-                    <div className="mt-6 text-center">
-                        <button onClick={() => handleViewChange('login')} className="font-medium text-sm text-cyan-400 hover:underline">Voltar para o acesso da empresa</button>
-                    </div>
-                </>
-            );
-        }
 
         if (view === 'register-choice') {
             return (
@@ -714,28 +691,6 @@ const LoginPage: React.FC = () => {
             <>
                 <h2 className="text-2xl font-bold text-dark-text text-center mb-4">Acessar Plataforma</h2>
 
-                {/* Login type toggle */}
-                <div className="flex items-center justify-center mb-4 bg-dark-background p-1 rounded-full border border-dark-border">
-                    <button
-                        onClick={() => setLoginType('company')}
-                        className={`w-1/3 py-2 text-xs sm:text-sm font-semibold rounded-full transition-all duration-300 ${loginType === 'company' ? 'bg-cyan-500 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}
-                    >
-                        Empresa
-                    </button>
-                    <button
-                        onClick={() => setLoginType('group')}
-                        className={`w-1/3 py-2 text-xs sm:text-sm font-semibold rounded-full transition-all duration-300 ${loginType === 'group' ? 'bg-cyan-500 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}
-                    >
-                        Grupo
-                    </button>
-                    <button
-                        onClick={() => setLoginType('employee')}
-                        className={`w-1/3 py-2 text-xs sm:text-sm font-semibold rounded-full transition-all duration-300 ${loginType === 'employee' ? 'bg-cyan-500 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}
-                    >
-                        Funcionário
-                    </button>
-                </div>
-                
                 <form onSubmit={handleFormSubmit} className="space-y-4">
                     <input name="email" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required className="w-full px-4 py-3 border border-dark-border rounded-lg bg-dark-card text-dark-text focus:ring-2 focus:ring-blue-500 focus:outline-none transition" placeholder="Seu e-mail" />
                     <div className="relative">
@@ -748,13 +703,6 @@ const LoginPage: React.FC = () => {
                 </form>
                 <div className="mt-6 text-center">
                     <button onClick={() => handleViewChange('register-choice')} className="font-medium text-sm text-cyan-400 hover:underline">Não tem uma conta? Cadastre-se aqui</button>
-                </div>
-                <div className="relative my-6">
-                    <div className="absolute inset-0 flex items-center" aria-hidden="true"><div className="w-full border-t border-dark-border"></div></div>
-                    <div className="relative flex justify-center text-sm"><span className="px-2 bg-dark-card text-gray-400">Ou</span></div>
-                </div>
-                <div className="text-center">
-                    <button onClick={() => handleViewChange('admin')} className="w-full flex justify-center py-3 px-4 border border-gray-500 text-base font-semibold rounded-lg text-dark-text bg-transparent hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark-card focus:ring-gray-500 transition-all duration-300 ease-in-out">Acessar como Administrador</button>
                 </div>
             </>
         )

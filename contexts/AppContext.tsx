@@ -28,7 +28,7 @@ interface AppContextType {
   selectedCompany: string | null;
   allRegisteredCompanies: User[];
   selectCompany: (companyName: string | null) => void;
-  login: (email: string, password: string, isAdminLogin: boolean, loginType?: 'company' | 'employee' | 'group') => Promise<{ success: boolean; message?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   register: (name: string, companyName: string, email: string, password: string, phone: string, logo: string, estado: string, cidade: string, bairro: string, birthDate: string, segmento: string) => Promise<{ success: boolean; message?: string }>;
   registerEmployee: (name: string, phone: string, email: string, password: string, companyCode: string, photo: string, estado: string, cidade: string, bairro: string, birthDate: string) => Promise<{ success: boolean; message?: string; }>;
@@ -167,53 +167,74 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setLogs(prev => [newLog, ...prev]);
   }, []);
 
-  const login = useCallback(async (email: string, password: string, isAdminLogin: boolean, loginType: 'company' | 'employee' | 'group' = 'company'): Promise<{ success: boolean; message?: string }> => {
-    if (isAdminLogin) {
-      try {
-        const response = await fetch('https://webhook.triad3.io/webhook/loginadmscoretriad3', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email, password }),
+  const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+        const response = await fetch('https://webhook.triad3.io/webhook/logins-score-inteligente-triad3', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password }),
         });
 
         const data = await response.json();
 
-        if (response.ok && data.resposta === "Sejá bem-vind@") {
-          const loggedInUser: User = {
-            id: `admin-${email}`,
-            name: data.nome,
-            email: email,
-            companyName: 'Triad3',
-            role: UserRole.ADMIN,
-            status: UserStatus.APPROVED,
-            phone: '',
-            passwordHash: '',
-          };
-          setCurrentUser(loggedInUser);
-          localStorage.setItem('currentUser', JSON.stringify(loggedInUser));
-          return { success: true };
-        } else {
-          return { success: false, message: data.resposta || "Usuário ou senha incorretos." };
+        if (!response.ok || data.resposta !== "Sejá bem-vind@") {
+            return { success: false, message: data.resposta || "Usuário ou senha incorretos." };
         }
-      } catch (error) {
-        console.error('Admin login API error:', error);
-        return { success: false, message: "Ocorreu um erro de comunicação ao tentar fazer login." };
-      }
-    } else if (loginType === 'group') {
-        try {
-            const response = await fetch('https://webhook.triad3.io/webhook/aceesogrupoempresarial', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
-            });
 
-            const data = await response.json();
+        let loggedInUser: User | null = null;
 
-            if (response.ok && data.resposta === "Sejá bem-vind@") {
+        // The API is inconsistent. Employee response has `cargo: "Funcionário"` but no `acesso` field.
+        const acesso = data.acesso || (data.cargo === 'Funcionário' ? 'Funcionário' : undefined);
+
+        switch (acesso) {
+            case 'ADM':
+                loggedInUser = {
+                    id: `admin-${email}`,
+                    name: data.nome,
+                    email: email,
+                    companyName: 'Triad3',
+                    role: UserRole.ADMIN,
+                    status: UserStatus.APPROVED,
+                    phone: '',
+                    passwordHash: '',
+                };
+                break;
+            
+            case 'Empresa':
+                loggedInUser = {
+                    id: `company-${email}`,
+                    name: data.nome,
+                    email: email,
+                    companyName: data.empresa,
+                    phone: data.telefone,
+                    role: UserRole.COMPANY,
+                    status: UserStatus.APPROVED,
+                    passwordHash: '',
+                    photoUrl: data.foto,
+                    companyCode: data.codigo,
+                };
+                break;
+
+            case 'Funcionário':
+                loggedInUser = {
+                    id: `employee-${email}`,
+                    name: data.nome,
+                    email: email,
+                    companyName: data.empresa,
+                    phone: data.telefone,
+                    role: UserRole.EMPLOYEE,
+                    status: UserStatus.APPROVED,
+                    passwordHash: '',
+                    photoUrl: data.foto,
+                    position: data.cargo,
+                };
+                break;
+            
+            case 'Grupo':
                 const companies = data.empresas ? data.empresas.split(',').map((e: string) => e.trim()) : [];
-                const loggedInUser: User = {
+                loggedInUser = {
                     id: `group-${email}`,
                     name: data.responsavel,
                     email: email,
@@ -224,73 +245,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     passwordHash: '',
                     managedCompanies: companies,
                 };
-                setCurrentUser(loggedInUser);
-                setUsers(prev => {
-                    const otherUsers = prev.filter(u => u.id !== loggedInUser.id);
-                    return [...otherUsers, loggedInUser];
-                });
-                localStorage.setItem('currentUser', JSON.stringify(loggedInUser));
-                return { success: true };
-            } else {
-                return { success: false, message: data.resposta || "Credenciais de grupo inválidas." };
-            }
-        } catch (error) {
-            console.error('Group login API error:', error);
-            return { success: false, message: "Ocorreu um erro de comunicação ao tentar fazer login como grupo." };
+                break;
+
+            default:
+                return { success: false, message: `Tipo de acesso desconhecido: ${data.acesso}` };
         }
-    } else {
-        const isEmployee = loginType === 'employee';
-        const endpoint = isEmployee 
-            ? 'https://webhook.triad3.io/webhook/funcionariosloginscore'
-            : 'https://webhook.triad3.io/webhook/loginusuarioscoretriad3';
         
-        const errorSource = isEmployee ? 'Employee' : 'User';
-        const genericErrorMessage = isEmployee
-            ? "Ocorreu um erro de comunicação ao tentar fazer login como funcionário."
-            : "Ocorreu um erro de comunicação ao tentar fazer login.";
-        const invalidCredentialsMessage = isEmployee
-            ? "Credenciais de funcionário inválidas ou conta não aprovada."
-            : "Credenciais inválidas ou conta não aprovada.";
-
-      try {
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email, password }),
-        });
-
-        const data = await response.json();
-
-        if (response.ok && data.resposta === "Sejá bem-vind@") {
-            const loggedInUser: User = {
-                id: isEmployee ? `employee-${email}` :`user-${email}`,
-                name: data.nome,
-                email: email,
-                companyName: data.empresa,
-                phone: data.telefone,
-                role: isEmployee ? UserRole.EMPLOYEE : UserRole.COMPANY,
-                status: UserStatus.APPROVED,
-                passwordHash: '',
-                photoUrl: data.foto,
-                position: data.cargo,
-                companyCode: data.codigo,
-            };
+        if (loggedInUser) {
             setCurrentUser(loggedInUser);
             setUsers(prev => {
-                const otherUsers = prev.filter(u => u.id !== loggedInUser.id);
-                return [...otherUsers, loggedInUser];
+                const otherUsers = prev.filter(u => u.id !== loggedInUser!.id);
+                return [...otherUsers, loggedInUser!];
             });
             localStorage.setItem('currentUser', JSON.stringify(loggedInUser));
             return { success: true };
         } else {
-            return { success: false, message: data.resposta || invalidCredentialsMessage };
+             return { success: false, message: "Não foi possível processar os dados do usuário." };
         }
+
     } catch (error) {
-        console.error(`${errorSource} login API error:`, error);
-        return { success: false, message: genericErrorMessage };
-    }
+        console.error('Unified login API error:', error);
+        return { success: false, message: "Ocorreu um erro de comunicação ao tentar fazer login." };
     }
   }, []);
 
