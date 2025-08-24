@@ -34,6 +34,7 @@ interface AppContextType {
   registerEmployee: (name: string, phone: string, email: string, password: string, companyCode: string, photo: string, estado: string, cidade: string, bairro: string, birthDate: string) => Promise<{ success: boolean; message?: string; }>;
   updateUserStatus: (userId: string, status: UserStatus) => void;
   approveUser: (userToApprove: User) => Promise<{ success: boolean; message?: string }>;
+  rejectUser: (userToReject: User) => Promise<{ success: boolean; message?: string }>;
   addCategory: (name: string) => Promise<void>;
   updateCategory: (category: Category, newName: string) => Promise<{ success: boolean; message?: string }>;
   deleteCategory: (category: Category) => Promise<{ success: boolean; message?: string }>;
@@ -540,6 +541,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }
   }, [currentUser, updateUserStatus]);
+
+  const rejectUser = useCallback(async (userToReject: User): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser || currentUser.role !== UserRole.ADMIN) {
+        return { success: false, message: "Apenas administradores podem rejeitar usuários." };
+    }
+
+    try {
+        const response = await fetch('https://webhook.triad3.io/webhook/rejeitaraprovacao', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(userToReject),
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.resposta === "Cadastro rejeitado com sucesso!") {
+            return { success: true, message: data.resposta };
+        } else {
+            return { success: false, message: data.resposta || "A API retornou uma resposta inesperada." };
+        }
+    } catch (error) {
+        console.error('Reject user API error:', error);
+        return { success: false, message: "Ocorreu um erro de comunicação ao tentar rejeitar o usuário." };
+    }
+  }, [currentUser]);
 
   const fetchPendingUsers = useCallback(async () => {
     try {
@@ -2026,7 +2054,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     login, logout, register, registerEmployee, updateUserStatus, addCategory, updateCategory, deleteCategory,
     addSegmento, updateSegmento, deleteSegmento,
     addQuestion, updateQuestion, deleteQuestion, addSubmission, addAdmin, updateAdmin, deleteAdmin,
-    changePassword, changeAdminPassword, changeGroupPassword, fetchAdminQuestionnaireData, fetchPendingUsers, approveUser, fetchApprovedUsersLogs,
+    changePassword, changeAdminPassword, changeGroupPassword, fetchAdminQuestionnaireData, fetchPendingUsers, approveUser, rejectUser, fetchApprovedUsersLogs,
     fetchLoginLogs,
     fetchSubmissions,
     fetchEmployeeScoresForAdmin,
@@ -2049,7 +2077,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     login, logout, register, registerEmployee, updateUserStatus, addCategory, updateCategory, deleteCategory,
     addSegmento, updateSegmento, deleteSegmento,
     addQuestion, updateQuestion, deleteQuestion, addSubmission, addAdmin, updateAdmin, deleteAdmin,
-    changePassword, changeAdminPassword, changeGroupPassword, fetchAdminQuestionnaireData, fetchPendingUsers, approveUser, fetchApprovedUsersLogs,
+    changePassword, changeAdminPassword, changeGroupPassword, fetchAdminQuestionnaireData, fetchPendingUsers, approveUser, rejectUser, fetchApprovedUsersLogs,
     fetchLoginLogs,
     fetchSubmissions,
     fetchEmployeeScoresForAdmin,

@@ -934,6 +934,9 @@ const DashboardPage: React.FC = () => {
     const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
     const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
     const [photoModalSrc, setPhotoModalSrc] = useState<string | null>(null);
+    const [companySearchTerm, setCompanySearchTerm] = useState('');
+    const [employeeSearchTerm, setEmployeeSearchTerm] = useState('');
+
 
     // Analysis & Oral Test view state
     const [analysisViewType, setAnalysisViewType] = useState<'company' | 'employee'>('company');
@@ -998,8 +1001,8 @@ const DashboardPage: React.FC = () => {
         if (selectedIdsForComparison.size < 1) return null;
   
         const data: {
-            overall: { name: string; score: number }[];
-            categories: Record<string, { name: string; score: number }[]>;
+            overall: { name: string; score: number; photoUrl?: string }[];
+            categories: Record<string, { name: string; score: number; photoUrl?: string }[]>;
             answersByCategory: Record<string, {
                 question: string;
                 answers: {
@@ -1021,23 +1024,26 @@ const DashboardPage: React.FC = () => {
         // Process Scores
         selectedIdsForComparison.forEach(id => {
             let name: string;
+            let photoUrl: string | undefined;
             let userSubs: Submission[];
             
             if (comparisonType === 'companies') {
                 const company = allRegisteredCompanies.find(c => c.id === id);
                 if (!company) return;
                 name = company.companyName;
+                photoUrl = company.photoUrl;
                 userSubs = sourceSubmissions.filter(s => s.companyName === name);
             } else {
                 const employee = allEmployees.find(e => e.id === id);
                 if (!employee) return;
                 name = `${employee.name} (${employee.companyName})`;
+                photoUrl = employee.photoUrl;
                 userSubs = sourceSubmissions.filter(s => s.userName === employee.name && s.companyName === employee.companyName);
             }
   
             if (userSubs.length === 0) {
-                 data.overall.push({ name, score: 0 });
-                 relevantCategories.forEach(cat => { data.categories[cat.name].push({ name, score: 0 }); });
+                 data.overall.push({ name, score: 0, photoUrl });
+                 relevantCategories.forEach(cat => { data.categories[cat.name].push({ name, score: 0, photoUrl }); });
                 return;
             };
   
@@ -1045,12 +1051,12 @@ const DashboardPage: React.FC = () => {
             const maxScore = userSubs.reduce((sum, s) => sum + s.maxScore, 0);
             const overallPercentage = maxScore > 0 ? (totalScore / maxScore) * 100 : 0;
             
-            data.overall.push({ name, score: overallPercentage });
+            data.overall.push({ name, score: overallPercentage, photoUrl });
   
             relevantCategories.forEach(cat => {
                 const catSub = userSubs.find(s => s.categoryId === cat.id);
                 const catScore = (catSub && catSub.maxScore > 0) ? (catSub.totalScore / catSub.maxScore) * 100 : 0;
-                data.categories[cat.name].push({ name, score: catScore });
+                data.categories[cat.name].push({ name, score: catScore, photoUrl });
             });
         });
 
@@ -1200,14 +1206,14 @@ const DashboardPage: React.FC = () => {
     useEffect(() => {
         if (
             activeTab === 'analysis' || 
-            ((activeTab === 'companies' || activeTab === 'comparativos') && currentUser?.role === UserRole.ADMIN)
+            ((activeTab === 'companies' || activeTab === 'comparativos' || activeTab === 'scores') && currentUser?.role === UserRole.ADMIN)
         ) {
             fetchAllRegisteredCompanies();
         }
     }, [activeTab, currentUser, fetchAllRegisteredCompanies]);
 
      useEffect(() => {
-        if (activeTab === 'oralTest' && currentUser?.role === UserRole.GROUP) {
+        if (activeTab === 'oralTest' && (currentUser?.role === UserRole.GROUP || currentUser?.role === UserRole.ADMIN)) {
             const loadResults = async () => {
                 setIsLoadingOralResults(true);
                 await fetchOralTestResults();
@@ -1215,7 +1221,7 @@ const DashboardPage: React.FC = () => {
             };
             loadResults();
         }
-    }, [activeTab, fetchOralTestResults, currentUser, selectedCompany]);
+    }, [activeTab, fetchOralTestResults, currentUser, selectedCompany, selectedUserId]);
 
 
     useEffect(() => {
@@ -1233,6 +1239,8 @@ const DashboardPage: React.FC = () => {
     useEffect(() => {
         setSelectedCategoryId('');
         setSelectedEmployeeId('');
+        setCompanySearchTerm('');
+        setEmployeeSearchTerm('');
     }, [viewType, selectedUserId, selectedCompany]);
     
     useEffect(() => {
@@ -1298,10 +1306,10 @@ const DashboardPage: React.FC = () => {
             if (viewType === 'employee') {
                 const uniqueEmployees = targetEmployeeSubmissions.reduce((acc, sub) => {
                     if (!acc.find(e => e.userId === sub.userId)) {
-                        acc.push({ userId: sub.userId, userName: sub.userName || 'Desconhecido', photoUrl: sub.photoUrl });
+                        acc.push({ userId: sub.userId, userName: sub.userName || 'Desconhecido', photoUrl: sub.photoUrl, companyName: sub.companyName });
                     }
                     return acc;
-                }, [] as { userId: string, userName: string, photoUrl?: string }[]);
+                }, [] as { userId: string, userName: string, photoUrl?: string, companyName: string }[]);
                 
                 let submissionsForView: Submission[] = [];
                 let employeeInfo: { name?: string, photoUrl?: string, companyName?: string } | null = null;
@@ -1313,7 +1321,7 @@ const DashboardPage: React.FC = () => {
                     submissionsForView = targetEmployeeSubmissions.filter(sub => sub.userId === selectedEmployeeId);
                     const emp = uniqueEmployees.find(e => e.userId === selectedEmployeeId);
                     if (emp) {
-                        employeeInfo = { name: emp.userName, photoUrl: emp.photoUrl, companyName: targetCompanyName || '' };
+                        employeeInfo = { name: emp.userName, photoUrl: emp.photoUrl, companyName: emp.companyName };
                     }
                 }
                 
@@ -1481,24 +1489,24 @@ const DashboardPage: React.FC = () => {
 
     const renderScoresContent = () => {
         let noDataMessage = 'Nenhuma avaliação encontrada.';
-        if (viewType === 'corporate' && userSubmissions.length === 0) {
+        if (viewType === 'corporate' && userSubmissions.length === 0 && (!currentUser || currentUser.role !== 'admin')) {
             let companyName = '';
-            if (currentUser?.role === UserRole.ADMIN) {
-                companyName = selectedUserId === 'all-companies' 
-                    ? 'Nenhuma empresa' 
-                    : users.find(u => u.id === selectedUserId)?.companyName || 'Esta empresa';
-            } else if (currentUser?.role === UserRole.GROUP) {
+            if (currentUser?.role === UserRole.GROUP) {
                 companyName = selectedCompany || 'Nenhuma empresa selecionada';
             } else {
                 companyName = currentUser?.companyName || 'Sua empresa';
             }
             noDataMessage = `${companyName} ainda não completou nenhum questionário.`;
         } else if (viewType === 'employee') {
-            if (employeeList.length === 0) noDataMessage = `Nenhum funcionário com score encontrado para esta empresa.`;
-            else if (userSubmissions.length === 0) noDataMessage = `O funcionário selecionado não possui scores registrados.`;
+             if (userSubmissions.length === 0 && (!currentUser || currentUser.role !== 'admin')) {
+                noDataMessage = `O funcionário selecionado não possui scores registrados.`;
+            }
         }
         
-        const dataAvailable = viewType === 'corporate' ? userSubmissions.length > 0 : employeeList.length > 0;
+        const dataAvailable = viewType === 'corporate' 
+            ? (currentUser?.role === 'admin' ? allRegisteredCompanies.length > 0 : userSubmissions.length > 0)
+            : (currentUser?.role === 'admin' ? allEmployees.length > 0 : employeeList.length > 0);
+
 
         if (!dataAvailable) {
             return (
@@ -1508,97 +1516,258 @@ const DashboardPage: React.FC = () => {
             );
         }
         
+        const employeeHeader = viewType === 'employee' && selectedEmployeeId && selectedEmployeeId !== 'all-employees' && selectedEmployeeInfo ? (
+            <div className="flex flex-col sm:flex-row items-center gap-4 mb-8 text-center sm:text-left p-4 bg-dark-card rounded-lg border border-dark-border">
+                {selectedEmployeeInfo.photoUrl && (
+                    <img src={selectedEmployeeInfo.photoUrl} alt={selectedEmployeeInfo.name || ''} className="w-20 h-20 rounded-full object-cover border-4 border-cyan-400" />
+                )}
+                <div>
+                    <h2 className="text-2xl font-bold">{selectedEmployeeInfo.name}</h2>
+                    {selectedEmployeeInfo.companyName && <p className="text-gray-400">{selectedEmployeeInfo.companyName}</p>}
+                </div>
+            </div>
+        ) : null;
+        
         if (viewType === 'employee' && selectedEmployeeId === 'all-employees') {
-             const submissionsByEmployee = targetEmployeeSubmissions.reduce((acc, sub) => {
-                if (!sub.userId) return acc;
-                if (!acc[sub.userId]) acc[sub.userId] = [];
-                acc[sub.userId].push(sub);
-                return acc;
-            }, {} as Record<string, Submission[]>);
+            let employeesToShow = allEmployees;
+            // Filter employees based on the current context (admin's selected company, group's selected company, etc.)
+            if (currentUser?.role === 'admin' && selectedUserId !== 'all-companies') {
+                const targetCompanyName = users.find(u => u.id === selectedUserId)?.companyName;
+                if (targetCompanyName) {
+                    employeesToShow = allEmployees.filter(e => e.companyName === targetCompanyName);
+                }
+            } else if (currentUser?.role === 'group' && selectedCompany) {
+                employeesToShow = allEmployees.filter(e => e.companyName === selectedCompany);
+            } else if (currentUser?.role === 'company') {
+                employeesToShow = allEmployees.filter(e => e.companyName === currentUser.companyName);
+            }
+            employeesToShow.sort((a, b) => a.name.localeCompare(b.name));
+
+            const filteredEmployees = employeesToShow.filter(employee =>
+                employee.name.toLowerCase().includes(employeeSearchTerm.toLowerCase()) ||
+                employee.companyName.toLowerCase().includes(employeeSearchTerm.toLowerCase())
+            );
+
             return (
                 <div>
-                    <h3 className="text-xl font-semibold mb-6 text-cyan-400">Visão Geral da Equipe</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {employeeList.map(employee => {
-                            const employeeSubs = submissionsByEmployee[employee.userId] || [];
-                            const totalScore = employeeSubs.reduce((sum, s) => sum + s.totalScore, 0);
-                            const maxScore = employeeSubs.reduce((sum, s) => sum + s.maxScore, 0);
-                            const overallPercentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
-                            const overallMaturity = getMaturityLevel(totalScore, maxScore);
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                        <h3 className="text-xl font-semibold text-cyan-400">Visão Geral da Equipe</h3>
+                         <div className="relative w-full sm:w-auto">
+                            <MagnifyingGlassIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Buscar por funcionário ou empresa..."
+                                value={employeeSearchTerm}
+                                onChange={(e) => setEmployeeSearchTerm(e.target.value)}
+                                className="w-full sm:w-80 p-3 pl-12 border border-dark-border rounded-lg bg-dark-background focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                            />
+                        </div>
+                    </div>
 
-                            return (
-                                <div key={employee.userId} className="bg-dark-card rounded-xl shadow-lg border border-dark-border p-4 sm:p-5 flex flex-col transition-all duration-300 hover:shadow-cyan-500/20 hover:-translate-y-1">
-                                    <div className="flex items-center gap-4 mb-4">
-                                        {employee.photoUrl && (
-                                            <img src={employee.photoUrl} alt={employee.userName} className="w-16 h-16 rounded-full object-cover cursor-pointer border-4 flex-shrink-0" style={{ borderColor: overallMaturity.chartColor }} onClick={() => setPhotoModalSrc(employee.photoUrl!)} />
-                                        )}
-                                        <div className="flex-grow min-w-0">
-                                            <p className="font-bold text-lg truncate" title={employee.userName}>{employee.userName}</p>
-                                            <p className="text-sm font-bold" style={{ color: overallMaturity.chartColor }}>Score Geral: {overallPercentage}%</p>
+                    {filteredEmployees.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                            {filteredEmployees.map(employee => {
+                                const employeeSubs = targetEmployeeSubmissions.filter(
+                                    sub => sub.phone === employee.phone && sub.userName === employee.name
+                                );
+                                const totalScore = employeeSubs.reduce((sum, s) => sum + s.totalScore, 0);
+                                const maxScore = employeeSubs.reduce((sum, s) => sum + s.maxScore, 0);
+                                const overallPercentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+                                const overallMaturity = getMaturityLevel(totalScore, maxScore);
+
+                                return (
+                                    <div key={employee.id} className="bg-dark-card rounded-xl shadow-lg border border-dark-border p-4 sm:p-5 flex flex-col transition-all duration-300 hover:shadow-cyan-500/20 hover:-translate-y-1">
+                                        <div className="flex items-center gap-4 mb-4">
+                                            <img src={employee.photoUrl || 'https://edrrnawrhfhoynpiwqsc.supabase.co/storage/v1/object/public/imagenscientes/Imagens%20Score%20Inteligente/icon%20user.png'} alt={employee.name} className="w-16 h-16 rounded-full object-cover cursor-pointer border-4 flex-shrink-0" style={{ borderColor: overallMaturity.chartColor }} onClick={() => employee.photoUrl && setPhotoModalSrc(employee.photoUrl)} />
+                                            <div className="flex-grow min-w-0">
+                                                <p className="font-bold text-lg truncate" title={employee.name}>{employee.name}</p>
+                                                <p className="text-sm text-gray-400">{employee.companyName}</p>
+                                                <p className="text-sm font-bold" style={{ color: overallMaturity.chartColor }}>Score Geral: {overallPercentage}%</p>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-3 mt-auto">
+                                            <h4 className="text-sm font-semibold text-gray-400 border-b border-dark-border pb-1">Desempenho por Categoria</h4>
+                                            {categories
+                                                .filter(c => questions.some(q => q.categoryId === c.id && q.targetRole === UserRole.EMPLOYEE))
+                                                .map(cat => {
+                                                    const catSub = employeeSubs.find(s => s.categoryId === cat.id);
+                                                    const score = catSub ? catSub.totalScore : 0;
+                                                    
+                                                    let maxCategoryScore = 0;
+                                                    if (catSub) {
+                                                        maxCategoryScore = catSub.maxScore;
+                                                    } else {
+                                                        maxCategoryScore = questions
+                                                            .filter(q => q.categoryId === cat.id && q.targetRole === UserRole.EMPLOYEE)
+                                                            .reduce((sum, q) => {
+                                                                const questionMax = q.answers.length > 0 ? Math.max(...q.answers.map(a => a.score)) : 0;
+                                                                return sum + questionMax;
+                                                            }, 0);
+                                                    }
+                                                    
+                                                    if (maxCategoryScore === 0) return null;
+
+                                                    const catPercentage = Math.round((score / maxCategoryScore) * 100);
+                                                    const catMaturity = getMaturityLevel(score, maxCategoryScore);
+                                                    
+                                                    return (
+                                                        <div key={cat.id}>
+                                                            <div className="flex justify-between text-sm mb-1"><span className="truncate pr-2" title={cat.name}>{cat.name}</span><span className="font-semibold" style={{ color: catMaturity.chartColor }}>{catPercentage}%</span></div>
+                                                            <div className="w-full bg-dark-background rounded-full h-2.5"><div className="h-2.5 rounded-full transition-all duration-500" style={{ width: `${catPercentage}%`, backgroundColor: catMaturity.chartColor }}></div></div>
+                                                        </div>
+                                                    );
+                                                })}
                                         </div>
                                     </div>
-                                    <div className="space-y-3 mt-auto">
-                                        <h4 className="text-sm font-semibold text-gray-400 border-b border-dark-border pb-1">Desempenho por Categoria</h4>
-                                        {categories
-                                            .filter(c => questions.some(q => q.categoryId === c.id && q.targetRole === UserRole.EMPLOYEE))
-                                            .map(cat => {
-                                                const catSub = employeeSubs.find(s => s.categoryId === cat.id);
-                                                const score = catSub ? catSub.totalScore : 0;
-                                                
-                                                let maxCategoryScore = 0;
-                                                if (catSub) {
-                                                    maxCategoryScore = catSub.maxScore;
-                                                } else {
-                                                    maxCategoryScore = questions
-                                                        .filter(q => q.categoryId === cat.id && q.targetRole === UserRole.EMPLOYEE)
-                                                        .reduce((sum, q) => {
-                                                            const questionMax = q.answers.length > 0 ? Math.max(...q.answers.map(a => a.score)) : 0;
-                                                            return sum + questionMax;
-                                                        }, 0);
-                                                }
-                                                
-                                                if (maxCategoryScore === 0) return null;
-
-                                                const catPercentage = Math.round((score / maxCategoryScore) * 100);
-                                                const catMaturity = getMaturityLevel(score, maxCategoryScore);
-                                                
-                                                return (
-                                                    <div key={cat.id}>
-                                                        <div className="flex justify-between text-sm mb-1"><span className="truncate pr-2" title={cat.name}>{cat.name}</span><span className="font-semibold" style={{ color: catMaturity.chartColor }}>{catPercentage}%</span></div>
-                                                        <div className="w-full bg-dark-background rounded-full h-2.5"><div className="h-2.5 rounded-full transition-all duration-500" style={{ width: `${catPercentage}%`, backgroundColor: catMaturity.chartColor }}></div></div>
-                                                    </div>
-                                                );
-                                            })}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="text-center py-12 sm:py-16 bg-dark-background rounded-xl border border-dark-border">
+                            <p className="text-lg text-gray-400">Nenhum funcionário encontrado com o termo "{employeeSearchTerm}".</p>
+                        </div>
+                    )}
                 </div>
             );
         }
         
         const submissionsToCompare = userSubmissions.filter(s => s.maxScore > 0);
         if (selectedCategoryId === 'compare-all') {
-            return (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {submissionsToCompare.map(submission => {
-                        const maturity = getMaturityLevel(submission.totalScore, submission.maxScore);
-                        const percentage = ((submission.totalScore / submission.maxScore) * 100).toFixed(0);
-                        const chartData = [{ name: 'Score', value: submission.totalScore }, { name: 'Remaining', value: Math.max(0, submission.maxScore - submission.totalScore) }];
-                        return (
-                            <div key={submission.id} className="bg-dark-card p-4 rounded-xl shadow-lg border border-dark-border flex flex-col items-center">
-                                <h3 className="text-lg font-semibold text-center text-cyan-400 mb-2">{submission.categoryName}</h3>
-                                <div style={{ width: '100%', height: 180, position: 'relative' }}>
-                                    <ResponsiveContainer><PieChart><Pie data={chartData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={70} startAngle={90} endAngle={450} cornerRadius={5}>{chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={[maturity.chartColor, '#374151'][index]} stroke="none" />)}</Pie></PieChart></ResponsiveContainer>
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-2xl sm:text-3xl font-bold">{percentage}%</span><span className="text-xs text-gray-400">{submission.totalScore} / {submission.maxScore} pts</span></div>
-                                </div>
-                                <div className={`mt-2 text-center font-semibold p-2 rounded-lg w-full ${maturity.color}`}>{maturity.icon} {maturity.level}</div>
+            if (
+                (currentUser?.role === 'admin' && selectedUserId === 'all-companies' && viewType === 'corporate') ||
+                (currentUser?.role === 'group' && !selectedCompany && viewType === 'corporate')
+            ) {
+                let companiesToShow = allRegisteredCompanies;
+                if(currentUser?.role === 'group'){
+                    const managedCompanyNames = new Set(currentUser.managedCompanies || []);
+                    companiesToShow = allRegisteredCompanies.filter(c => managedCompanyNames.has(c.companyName));
+                }
+
+                const companyListForCards = companiesToShow.map(company => {
+                    const companySubs = userSubmissions.filter(s => s.companyName === company.companyName);
+                    return {
+                        id: company.id,
+                        name: company.companyName,
+                        photoUrl: company.photoUrl,
+                        submissions: companySubs
+                    };
+                }).sort((a,b) => a.name.localeCompare(b.name));
+                
+                const filteredCompanyList = companyListForCards.filter(company =>
+                    company.name.toLowerCase().includes(companySearchTerm.toLowerCase())
+                );
+                
+                if (companyListForCards.length === 0) {
+                    return (
+                         <div className="text-center py-12 sm:py-16 bg-dark-card rounded-xl shadow-lg border border-dark-border">
+                            <p className="text-lg text-gray-400">Nenhuma empresa encontrada para exibir.</p>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div>
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                            <h3 className="text-xl font-semibold text-cyan-400">Visão Geral das Empresas</h3>
+                            <div className="relative w-full sm:w-auto">
+                                <MagnifyingGlassIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar por empresa..."
+                                    value={companySearchTerm}
+                                    onChange={(e) => setCompanySearchTerm(e.target.value)}
+                                    className="w-full sm:w-80 p-3 pl-12 border border-dark-border rounded-lg bg-dark-background focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                                />
                             </div>
-                        );
-                    })}
-                </div>
-            );
+                        </div>
+                        
+                        {filteredCompanyList.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                                {filteredCompanyList.map(company => {
+                                    const companySubs = company.submissions;
+                                    const totalScore = companySubs.reduce((sum, s) => sum + s.totalScore, 0);
+                                    const maxScore = companySubs.reduce((sum, s) => sum + s.maxScore, 0);
+                                    const overallPercentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+                                    const overallMaturity = getMaturityLevel(totalScore, maxScore);
+            
+                                    return (
+                                        <div key={company.id} className="bg-dark-card rounded-xl shadow-lg border border-dark-border p-4 sm:p-5 flex flex-col transition-all duration-300 hover:shadow-cyan-500/20 hover:-translate-y-1">
+                                            <div className="flex items-center gap-4 mb-4">
+                                                <img
+                                                    src={company.photoUrl || 'https://edrrnawrhfhoynpiwqsc.supabase.co/storage/v1/object/public/imagenscientes/Imagens%20Score%20Inteligente/icon%20user.png'}
+                                                    alt={company.name}
+                                                    className="w-16 h-16 rounded-full object-contain bg-dark-background p-1 cursor-pointer border-4 flex-shrink-0"
+                                                    style={{ borderColor: overallMaturity.chartColor }}
+                                                    onClick={() => company.photoUrl && setPhotoModalSrc(company.photoUrl)}
+                                                />
+                                                <div className="flex-grow min-w-0">
+                                                    <p className="font-bold text-lg truncate" title={company.name}>{company.name}</p>
+                                                    <p className="text-sm font-bold" style={{ color: overallMaturity.chartColor }}>Score Geral: {overallPercentage}%</p>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-3 mt-auto">
+                                                <h4 className="text-sm font-semibold text-gray-400 border-b border-dark-border pb-1">Desempenho por Categoria</h4>
+                                                {categories
+                                                    .filter(c => questions.some(q => q.categoryId === c.id && q.targetRole === UserRole.COMPANY))
+                                                    .map(cat => {
+                                                        const catSub = companySubs.find(s => s.categoryId === cat.id);
+                                                        const score = catSub ? catSub.totalScore : 0;
+                                                        
+                                                        let maxCategoryScore = 0;
+                                                        if (catSub) {
+                                                            maxCategoryScore = catSub.maxScore;
+                                                        } else {
+                                                            maxCategoryScore = questions
+                                                                .filter(q => q.categoryId === cat.id && q.targetRole === UserRole.COMPANY)
+                                                                .reduce((sum, q) => sum + (q.answers.length > 0 ? Math.max(...q.answers.map(a => a.score)) : 0), 0);
+                                                        }
+                                                        
+                                                        if (maxCategoryScore === 0) return null;
+            
+                                                        const catPercentage = Math.round((score / maxCategoryScore) * 100);
+                                                        const catMaturity = getMaturityLevel(score, maxCategoryScore);
+                                                        
+                                                        return (
+                                                            <div key={cat.id}>
+                                                                <div className="flex justify-between text-sm mb-1"><span className="truncate pr-2" title={cat.name}>{cat.name}</span><span className="font-semibold" style={{ color: catMaturity.chartColor }}>{catPercentage}%</span></div>
+                                                                <div className="w-full bg-dark-background rounded-full h-2.5"><div className="h-2.5 rounded-full transition-all duration-500" style={{ width: `${catPercentage}%`, backgroundColor: catMaturity.chartColor }}></div></div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="text-center py-12 sm:py-16 bg-dark-background rounded-xl border border-dark-border">
+                                <p className="text-lg text-gray-400">Nenhuma empresa encontrada com o termo "{companySearchTerm}".</p>
+                            </div>
+                        )}
+                    </div>
+                );
+            } else { // Original logic for comparing categories of a single company
+                 return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                        {submissionsToCompare.map(submission => {
+                            const maturity = getMaturityLevel(submission.totalScore, submission.maxScore);
+                            const percentage = submission.maxScore > 0 ? ((submission.totalScore / submission.maxScore) * 100).toFixed(0) : '0';
+                            const chartData = [{ name: 'Score', value: submission.totalScore }, { name: 'Remaining', value: Math.max(0, submission.maxScore - submission.totalScore) }];
+                            
+                            return (
+                                <div key={submission.id} className="bg-dark-card p-4 rounded-xl shadow-lg border border-dark-border flex flex-col items-center">
+                                    <h3 className={`text-lg font-semibold text-center text-cyan-400 mb-2`}>{submission.categoryName}</h3>
+                                    <div style={{ width: '100%', height: 180, position: 'relative' }}>
+                                        <ResponsiveContainer><PieChart><Pie data={chartData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={70} startAngle={90} endAngle={450} cornerRadius={5}>{chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={[maturity.chartColor, '#374151'][index]} stroke="none" />)}</Pie></PieChart></ResponsiveContainer>
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-2xl sm:text-3xl font-bold">{percentage}%</span><span className="text-xs text-gray-400">{submission.totalScore} / {submission.maxScore} pts</span></div>
+                                    </div>
+                                    <div className={`mt-2 text-center font-semibold p-2 rounded-lg w-full ${maturity.color}`}>{maturity.icon} {maturity.level}</div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            }
         }
 
         if (selectedSubmission) {
@@ -1609,6 +1778,7 @@ const DashboardPage: React.FC = () => {
 
             return (
                  <div className="space-y-8">
+                    {employeeHeader}
                     <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
                         <div className="lg:col-span-2 bg-dark-card p-4 sm:p-6 rounded-xl shadow-lg border border-dark-border flex flex-col items-center justify-center">
                             <h3 className="text-xl font-semibold mb-4 text-center text-cyan-400">Score: {selectedSubmission.categoryName}</h3>
@@ -1847,6 +2017,112 @@ const DashboardPage: React.FC = () => {
         );
     };
 
+    const renderOralTestContent = () => {
+        if (currentUser?.role === UserRole.EMPLOYEE) {
+            return (
+                <div className="bg-dark-card p-6 rounded-xl shadow-lg border border-dark-border text-center">
+                    <h2 className="text-2xl font-semibold text-dark-text mb-4">Prova Oral</h2>
+                    <p className="text-gray-400 mb-6">Verifique suas provas orais pendentes, em andamento ou veja seus resultados.</p>
+                    <button
+                        onClick={() => setIsOralTestModalOpen(true)}
+                        className="px-6 py-3 font-bold text-gray-900 bg-gradient-to-r from-cyan-400 to-blue-400 rounded-lg shadow-lg hover:from-cyan-300 hover:to-blue-300 transition-all transform hover:scale-105"
+                    >
+                        Acessar Provas Orais
+                    </button>
+                </div>
+            );
+        }
+    
+        if (currentUser?.role === UserRole.COMPANY) {
+            return (
+                <div className="bg-dark-card p-6 rounded-xl shadow-lg border border-dark-border text-center">
+                    <h2 className="text-2xl font-semibold text-dark-text mb-4">Resultados da Prova Oral</h2>
+                    <p className="text-gray-400 mb-6">Veja os resultados das provas orais dos funcionários da sua empresa.</p>
+                    <button
+                        onClick={() => setIsCompanyOralTestResultsModalOpen(true)}
+                        className="px-6 py-3 font-bold text-gray-900 bg-gradient-to-r from-cyan-400 to-blue-400 rounded-lg shadow-lg hover:from-cyan-300 hover:to-blue-300 transition-all transform hover:scale-105"
+                    >
+                        Ver Resultados
+                    </button>
+                </div>
+            );
+        }
+        
+        // For ADMIN and GROUP
+        let resultsToShow: OralTestResult[] = [];
+        if (currentUser?.role === UserRole.ADMIN) {
+            if (selectedUserId === 'all-companies') {
+                resultsToShow = oralTestResults;
+            } else {
+                const companyName = users.find(u => u.id === selectedUserId)?.companyName;
+                if (companyName) {
+                    resultsToShow = oralTestResults.filter(r => r.empresa === companyName);
+                }
+            }
+        } else if (currentUser?.role === UserRole.GROUP) {
+            if (selectedCompany) {
+                resultsToShow = oralTestResults.filter(r => r.empresa === selectedCompany);
+            } else {
+                const managedCompanies = currentUser.managedCompanies || [];
+                resultsToShow = oralTestResults.filter(r => managedCompanies.includes(r.empresa));
+            }
+        }
+        
+        if (isLoadingOralResults) {
+            return (
+                <div className="text-center py-16 bg-dark-card rounded-xl shadow-md border border-dark-border">
+                    <div className="loader triangle mx-auto"><svg viewBox="0 0 86 80"><polygon points="43 8 79 72 7 72"></polygon></svg></div>
+                    <p className="text-gray-400 mt-4">Carregando resultados...</p>
+                </div>
+            );
+        }
+    
+        if (resultsToShow.length === 0) {
+            return (
+                <div className="text-center py-16 bg-dark-card rounded-xl shadow-md border border-dark-border">
+                    <h2 className="text-2xl font-semibold text-dark-text">Nenhum Resultado Disponível</h2>
+                    <p className="text-gray-400 mt-2">No momento, não há resultados de provas orais para a seleção atual.</p>
+                </div>
+            );
+        }
+    
+        return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {resultsToShow.map(result => {
+                    const scoreAnterior = parseInt(result.score_anterior || '0', 10);
+                    const scoreAtual = parseInt(result.score_atual || '0', 10);
+                    return (
+                        <div 
+                            key={result.id} 
+                            className="bg-dark-background rounded-xl shadow-lg border border-dark-border flex flex-col text-left transition-all duration-300 hover:shadow-cyan-500/20 hover:-translate-y-1 cursor-pointer"
+                            onClick={() => setViewingResult(mapOralTestResultToAvailableOralTest(result))}
+                        >
+                           <div className="p-5 flex-grow">
+                                <div className="flex items-center gap-4 mb-4">
+                                    {result.foto && <img src={result.foto} alt={result.nome} className="w-16 h-16 rounded-full object-cover border-4 border-cyan-400 flex-shrink-0" />}
+                                    <div className="min-w-0">
+                                        <h2 className="text-xl font-bold text-dark-text truncate" title={result.nome}>{result.nome}</h2>
+                                        <p className="text-sm font-semibold text-cyan-400">{result.categoria || 'Prova Oral'}</p>
+                                        <p className="text-xs text-gray-400 mt-1">{result.empresa}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between text-sm text-gray-400 mb-4 bg-dark-card p-2 rounded-lg">
+                                    <div className="flex items-center gap-2"><CalendarIcon className="h-4 w-4" /> <span>{result.data}</span></div>
+                                    <div className="font-semibold text-base text-gray-300">
+                                        {scoreAnterior} &rarr; <span className="text-green-400">{scoreAtual}</span>
+                                    </div>
+                                </div>
+                           </div>
+                            <div className="text-center bg-dark-border/30 px-5 py-3 text-sm font-semibold text-cyan-400 rounded-b-xl">
+                                Ver Detalhes
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+
     const renderComparativosContent = () => {
       return (
         <div className="bg-dark-card p-4 sm:p-6 rounded-xl shadow-lg border border-dark-border">
@@ -1926,7 +2202,25 @@ const DashboardPage: React.FC = () => {
                                     const chartData = [{ name: 'Score', value: item.score }, { name: 'Remaining', value: Math.max(0, 100 - item.score) }];
                                     return (
                                         <div key={item.name} className="bg-dark-background p-4 rounded-xl shadow-lg border border-dark-border flex flex-col items-center">
-                                            <h4 className="text-base font-semibold text-center text-cyan-400 mb-2 h-12 flex items-center justify-center" title={item.name}>{item.name}</h4>
+                                            <div className="flex items-center justify-center gap-3 mb-2 h-12">
+                                                {item.photoUrl && (
+                                                    <img
+                                                        src={item.photoUrl}
+                                                        alt={`Logo de ${item.name}`}
+                                                        className={`h-10 w-10 shrink-0 ${
+                                                            comparisonType === 'companies'
+                                                                ? 'object-contain'
+                                                                : 'rounded-full object-cover'
+                                                        }`}
+                                                    />
+                                                )}
+                                                <h4
+                                                    className="text-base font-semibold text-center text-cyan-400"
+                                                    title={item.name}
+                                                >
+                                                    {item.name}
+                                                </h4>
+                                            </div>
                                             <div style={{ width: '100%', height: 180, position: 'relative' }}>
                                                 <ResponsiveContainer>
                                                     <PieChart>
@@ -1957,7 +2251,25 @@ const DashboardPage: React.FC = () => {
                                     const chartData = [{ name: 'Score', value: item.score }, { name: 'Remaining', value: Math.max(0, 100 - item.score) }];
                                     return (
                                         <div key={item.name} className="bg-dark-background p-4 rounded-xl shadow-lg border border-dark-border flex flex-col items-center">
-                                            <h4 className="text-base font-semibold text-center text-cyan-400 mb-2 h-12 flex items-center justify-center" title={item.name}>{item.name}</h4>
+                                            <div className="flex items-center justify-center gap-3 mb-2 h-12">
+                                                {item.photoUrl && (
+                                                    <img
+                                                        src={item.photoUrl}
+                                                        alt={`Logo de ${item.name}`}
+                                                        className={`h-10 w-10 shrink-0 ${
+                                                            comparisonType === 'companies'
+                                                                ? 'object-contain'
+                                                                : 'rounded-full object-cover'
+                                                        }`}
+                                                    />
+                                                )}
+                                                <h4
+                                                    className="text-base font-semibold text-center text-cyan-400"
+                                                    title={item.name}
+                                                >
+                                                    {item.name}
+                                                </h4>
+                                            </div>
                                             <div style={{ width: '100%', height: 180, position: 'relative' }}>
                                                 <ResponsiveContainer>
                                                     <PieChart>
@@ -2019,118 +2331,13 @@ const DashboardPage: React.FC = () => {
     </div>
   );};
 
-    const renderOralTestContent = () => {
-        if (!currentUser) return null;
-        
-        if (currentUser.role === UserRole.EMPLOYEE) {
-            return (
-                <div className="text-center py-12 sm:py-16 bg-dark-card rounded-xl shadow-lg border border-dark-border">
-                    <h2 className="text-2xl font-semibold text-dark-text">Acesse sua Prova Oral</h2>
-                    <p className="text-gray-400 mt-2 mb-6 max-w-lg mx-auto">Clique no botão abaixo para ver as provas disponíveis, em andamento ou os resultados das provas que você já completou.</p>
-                    <button onClick={() => setIsOralTestModalOpen(true)} className="px-6 py-3 font-bold text-white bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg shadow-lg hover:from-cyan-600 hover:to-blue-700 transition-all">
-                        Minhas Provas Orais
-                    </button>
-                </div>
-            );
-        }
-
-        if (currentUser.role === UserRole.COMPANY) {
-            return (
-                 <div className="text-center py-12 sm:py-16 bg-dark-card rounded-xl shadow-lg border border-dark-border">
-                    <h2 className="text-2xl font-semibold text-dark-text">Resultados da Prova Oral</h2>
-                    <p className="text-gray-400 mt-2 mb-6 max-w-lg mx-auto">Acompanhe os resultados das provas orais aplicadas aos funcionários da sua empresa.</p>
-                    <button onClick={() => setIsCompanyOralTestResultsModalOpen(true)} className="px-6 py-3 font-bold text-white bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg shadow-lg hover:from-cyan-600 hover:to-blue-700 transition-all">
-                        Ver Resultados da Empresa
-                    </button>
-                </div>
-            );
-        }
-        
-        if (currentUser.role === UserRole.ADMIN || (currentUser.role === UserRole.GROUP && selectedCompany)) {
-            const companyName = currentUser.role === 'admin' 
-                ? users.find(u => u.id === selectedUserId)?.companyName 
-                : selectedCompany;
-            
-            if (currentUser.role === 'admin' && selectedUserId === 'all-companies') {
-                return (
-                     <div className="text-center py-12 sm:py-16 bg-dark-card rounded-xl shadow-lg border border-dark-border">
-                        <h2 className="text-2xl font-semibold text-dark-text">Resultados da Prova Oral</h2>
-                        <p className="text-gray-400 mt-2 mb-6 max-w-lg mx-auto">Selecione uma empresa na visão geral para ver os resultados da prova oral.</p>
-                    </div>
-                )
-            }
-            
-            const resultsForCompany = oralTestResults.filter(r => r.empresa === companyName);
-
-            return (
-                <div className="bg-dark-card p-6 rounded-xl shadow-lg border border-dark-border">
-                    <h2 className="text-xl font-semibold mb-4">Resultados para: <span className="text-cyan-400">{companyName}</span></h2>
-                     {resultsForCompany.length === 0 ? (
-                        <p className="text-center py-8 text-gray-400">Nenhum resultado de prova oral encontrado para esta empresa.</p>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {resultsForCompany.map(result => (
-                                <div key={result.id} onClick={() => setViewingResult(mapOralTestResultToAvailableOralTest(result))} className="bg-dark-background p-4 rounded-lg border border-dark-border cursor-pointer hover:border-cyan-400 transition-colors">
-                                    <div className="flex items-center gap-4">
-                                        <img src={result.foto} alt={result.nome} className="w-12 h-12 rounded-full object-cover"/>
-                                        <div>
-                                            <p className="font-bold">{result.nome}</p>
-                                            <p className="text-xs text-gray-400">{result.categoria || 'Prova Oral'}</p>
-                                        </div>
-                                    </div>
-                                    <div className="mt-3 pt-3 border-t border-dark-border text-sm text-center font-semibold text-gray-300">
-                                         Score: {result.score_anterior} &rarr; <span className="text-green-400">{result.score_atual}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )
-        }
-        
-        if (currentUser.role === UserRole.GROUP && !selectedCompany) {
-             const allGroupResults = oralTestResults.filter(r => currentUser.managedCompanies?.includes(r.empresa));
-             
-             return (
-                 <div className="bg-dark-card p-6 rounded-xl shadow-lg border border-dark-border">
-                     <h2 className="text-xl font-semibold mb-4">Resultados do Grupo: <span className="text-cyan-400">{currentUser.companyName}</span></h2>
-                     {isLoadingOralResults ? (
-                        <p className="text-center py-8 text-gray-400">Carregando resultados...</p>
-                     ) : allGroupResults.length === 0 ? (
-                        <p className="text-center py-8 text-gray-400">Nenhum resultado de prova oral encontrado para as empresas deste grupo.</p>
-                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {allGroupResults.map(result => (
-                                <div key={result.id} onClick={() => setViewingResult(mapOralTestResultToAvailableOralTest(result))} className="bg-dark-background p-4 rounded-lg border border-dark-border cursor-pointer hover:border-cyan-400 transition-colors">
-                                    <div className="flex items-center gap-4">
-                                        <img src={result.foto} alt={result.nome} className="w-12 h-12 rounded-full object-cover"/>
-                                        <div>
-                                            <p className="font-bold">{result.nome}</p>
-                                            <p className="text-xs text-gray-400">{result.empresa}</p>
-                                        </div>
-                                    </div>
-                                     <div className="mt-3 pt-3 border-t border-dark-border text-sm text-center font-semibold text-gray-300">
-                                         Score: {result.score_anterior} &rarr; <span className="text-green-400">{result.score_atual}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                     )}
-                 </div>
-            );
-        }
-
-        return null;
-    };
-    
     const tabs = useMemo(() => [
         { id: 'scores', label: 'Scores', roles: [UserRole.ADMIN, UserRole.COMPANY, UserRole.EMPLOYEE, UserRole.GROUP] },
         { id: 'analysis', label: 'Análise NeuroMapa', roles: [UserRole.ADMIN, UserRole.COMPANY, UserRole.EMPLOYEE, UserRole.GROUP] },
         { id: 'oralTest', label: 'Prova Oral', roles: [UserRole.ADMIN, UserRole.COMPANY, UserRole.EMPLOYEE, UserRole.GROUP] },
         { id: 'funcionarios', label: 'Funcionários', roles: [UserRole.COMPANY, UserRole.GROUP] },
         { id: 'companies', label: 'Empresas', roles: [UserRole.ADMIN] },
-        { id: 'comparativos', label: 'Comparativos', roles: [UserRole.ADMIN] }
+        { id: 'comparativos', label: 'Comparativos', roles: [UserRole.ADMIN, UserRole.GROUP] }
     ], []);
 
     return (
@@ -2197,29 +2404,6 @@ const DashboardPage: React.FC = () => {
                     {currentUser?.role === 'admin' && ' (Admin)'}
                     {currentUser?.role === 'group' && selectedCompany && ` - ${selectedCompany}`}
                 </h1>
-                {/* Admin/Group/Company Controls */}
-                {(currentUser?.role === 'admin' || currentUser?.role === 'group' || currentUser?.role === 'company') && (
-                    <div className="flex flex-wrap items-center justify-start sm:justify-end gap-x-6 gap-y-3">
-                        {currentUser.role === 'admin' && (
-                            <div className="flex items-center gap-2">
-                                <label htmlFor="user-select" className="text-sm font-medium shrink-0">Visualizando:</label>
-                                <select id="user-select" value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)} className="p-2 border border-dark-border rounded-lg bg-dark-card focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                    <option value="all-companies">Todas as Empresas (Visão Geral)</option>
-                                    {companyList.map(u => <option key={u.id} value={u.id}>{u.companyName}</option>)}
-                                </select>
-                            </div>
-                        )}
-                        {(currentUser.role === 'admin' && selectedUserId !== 'all-companies') || currentUser.role === 'company' || (currentUser.role === 'group' && selectedCompany) ? (
-                            <div className="flex items-center gap-2">
-                                <label htmlFor="view-type-select" className="text-sm font-medium shrink-0">Tipo de Visão:</label>
-                                <div className="flex items-center bg-dark-background p-1 rounded-full border border-dark-border">
-                                    <button onClick={() => setViewType('corporate')} className={`px-3 py-1 text-xs font-semibold rounded-full transition-all ${viewType === 'corporate' ? 'bg-cyan-500 text-white shadow-md' : 'text-gray-400'}`}>Corporativa</button>
-                                    <button onClick={() => setViewType('employee')} className={`px-3 py-1 text-xs font-semibold rounded-full transition-all ${viewType === 'employee' ? 'bg-cyan-500 text-white shadow-md' : 'text-gray-400'}`}>Por Funcionário</button>
-                                </div>
-                            </div>
-                        ) : null}
-                    </div>
-                )}
             </div>
 
             {/* Tabs */}
@@ -2234,6 +2418,53 @@ const DashboardPage: React.FC = () => {
                     </button>
                 ))}
             </div>
+
+             {/* NEW FILTER BAR */}
+            {activeTab === 'scores' && (currentUser?.role === 'admin' || currentUser?.role === 'company' || (currentUser?.role === 'group' && selectedCompany)) && (
+                <div className="bg-dark-card p-4 rounded-xl mb-8 flex flex-wrap items-center gap-x-6 gap-y-4">
+                    {/* Corporativo/Funcionário Toggle */}
+                    <div className="flex items-center gap-2">
+                        <div className="flex items-center bg-dark-background p-1 rounded-full border border-dark-border">
+                            <button onClick={() => setViewType('corporate')} className={`px-4 py-1 text-sm font-semibold rounded-full transition-all ${viewType === 'corporate' ? 'bg-cyan-500 text-white shadow-md' : 'text-gray-400'}`}>Corporativo</button>
+                            <button onClick={() => setViewType('employee')} className={`px-4 py-1 text-sm font-semibold rounded-full transition-all ${viewType === 'employee' ? 'bg-cyan-500 text-white shadow-md' : 'text-gray-400'}`}>Funcionários</button>
+                        </div>
+                    </div>
+                    
+                    {/* Empresa Dropdown (Admin only) */}
+                    {currentUser.role === 'admin' && (
+                        <div className="flex items-center gap-2">
+                            <label htmlFor="user-select" className="text-sm font-medium shrink-0">Empresa:</label>
+                            <select id="user-select" value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)} className="p-2 border border-dark-border rounded-lg bg-dark-background focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="all-companies">Todas as Empresas</option>
+                                {companyList.map(u => <option key={u.id} value={u.id}>{u.companyName}</option>)}
+                            </select>
+                        </div>
+                    )}
+
+                    {/* Funcionário Dropdown (when employee view is active) */}
+                    {viewType === 'employee' && employeeList.length > 0 && (
+                        <div className="flex items-center gap-2">
+                            <label htmlFor="employee-select" className="text-sm font-medium shrink-0">Funcionário:</label>
+                            <select id="employee-select" value={selectedEmployeeId} onChange={e => setSelectedEmployeeId(e.target.value)} className="p-2 border border-dark-border rounded-lg bg-dark-background focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="all-employees">Visão Geral da Equipe</option>
+                                {employeeList.map(emp => <option key={emp.userId} value={emp.userId}>{emp.userName}</option>)}
+                            </select>
+                        </div>
+                    )}
+                    
+                    {/* Categoria Dropdown (if data is available) */}
+                    {completedCategories.length > 0 && (
+                        <div className="flex items-center gap-2">
+                            <label htmlFor="category-select" className="text-sm font-medium shrink-0">Análise:</label>
+                            <select id="category-select" value={selectedCategoryId} onChange={e => setSelectedCategoryId(e.target.value)} className="p-2 border border-dark-border rounded-lg bg-dark-background focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                {completedCategories.length > 1 && <option value="compare-all">Visão Comparativa</option>}
+                                <option value="all-categories">Resultado Geral</option>
+                                {completedCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                            </select>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Tab Content */}
             {activeTab === 'scores' && renderScoresContent()}

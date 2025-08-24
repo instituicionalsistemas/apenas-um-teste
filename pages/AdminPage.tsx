@@ -41,14 +41,60 @@ const EyeOffIcon = () => (
       <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a9.97 9.97 0 01-1.563 3.029m-2.14 2.14l-3.289-3.29" />
     </svg>
 );
+const CheckCircleIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+    </svg>
+);
+const XCircleIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+    </svg>
+);
+
+const ApiMessageModal: React.FC<{
+    message: { type: 'success' | 'error', text: string } | null;
+    onClose: () => void;
+}> = ({ message, onClose }) => {
+    if (!message) return null;
+
+    const isSuccess = message.type === 'success';
+    const iconColor = isSuccess ? 'text-green-400' : 'text-red-400';
+    const buttonClass = isSuccess ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700';
+    const Icon = isSuccess ? CheckCircleIcon : XCircleIcon;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-75 z-[70] flex justify-center items-center p-4">
+            <div className="bg-dark-card rounded-xl shadow-2xl p-6 w-full max-w-md text-center border border-dark-border">
+                <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full ${isSuccess ? 'bg-green-100' : 'bg-red-100'}`}>
+                    <Icon className={`h-8 w-8 ${iconColor}`} />
+                </div>
+                <h3 className="text-xl font-bold mt-4 mb-2 text-dark-text">{isSuccess ? 'Sucesso!' : 'Erro!'}</h3>
+                <div className="mb-6 text-gray-300">
+                    <p>{message.text}</p>
+                </div>
+                <div className="flex justify-center">
+                    <button
+                        onClick={onClose}
+                        className={`px-6 py-2 rounded-md text-base font-medium text-white transition-colors ${buttonClass}`}
+                    >
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 interface PendingApprovalsProps {
     onApproveRequest: (user: User) => void;
+    onRejectRequest: (user: User) => void;
 }
 
 // Sub-component for pending approvals
-const PendingApprovals: React.FC<PendingApprovalsProps> = ({ onApproveRequest }) => {
-    const { users, updateUserStatus } = useApp();
+const PendingApprovals: React.FC<PendingApprovalsProps> = ({ onApproveRequest, onRejectRequest }) => {
+    const { users } = useApp();
     const [filter, setFilter] = useState<'company' | 'employee'>('company');
 
     const pendingUsers = useMemo(() => {
@@ -92,7 +138,7 @@ const PendingApprovals: React.FC<PendingApprovalsProps> = ({ onApproveRequest })
                             </div>
                             <div className="flex space-x-2 mt-2 sm:mt-0 shrink-0">
                                 <button onClick={() => onApproveRequest(user)} className="px-3 py-1 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors">Aprovar</button>
-                                <button onClick={() => updateUserStatus(user.id, UserStatus.REJECTED)} className="px-3 py-1 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors">Rejeitar</button>
+                                <button onClick={() => onRejectRequest(user)} className="px-3 py-1 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors">Rejeitar</button>
                             </div>
                         </li>
                     ))}
@@ -1178,9 +1224,9 @@ const GruposEmpresariais = () => {
 
 // Main Admin Page Component
 const AdminPage: React.FC = () => {
-    const { addAdmin, addCategory, deleteCategory, addQuestion, deleteQuestion, deleteAdmin, categories, fetchAdminQuestionnaireData, fetchPendingUsers, fetchApprovedUsersLogs, approveUser, updateCategory, updateQuestion, updateAdmin, addSegmento, updateSegmento, deleteSegmento, fetchSegmentos, segmentos } = useApp();
+    const { addAdmin, addCategory, deleteCategory, addQuestion, deleteQuestion, deleteAdmin, categories, fetchAdminQuestionnaireData, fetchPendingUsers, fetchApprovedUsersLogs, approveUser, rejectUser, updateCategory, updateQuestion, updateAdmin, addSegmento, updateSegmento, deleteSegmento, fetchSegmentos, segmentos } = useApp();
     const [activeView, setActiveView] = useState<'painel' | 'grupos' | 'segmentos'>('painel');
-    const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+    const [apiMessage, setApiMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
     
     type QuestionDataType = { categoryId: string; text: string; answers: { text: string; score: number }[], targetRole: UserRole.COMPANY | UserRole.EMPLOYEE };
     type AdminDataType = { name: string, email: string, password: string, phone: string };
@@ -1198,6 +1244,7 @@ const AdminPage: React.FC = () => {
         { isOpen: true, type: 'add-category', name: string } |
         { isOpen: true, type: 'add-question', data: QuestionDataType } |
         { isOpen: true, type: 'approve-user', user: User } |
+        { isOpen: true, type: 'reject-user', user: User } |
         { isOpen: true, type: 'add-segmento', name: string } |
         { isOpen: true, type: 'edit-segmento', segmento: Segmento, newName: string } |
         { isOpen: true, type: 'delete-segmento', segmento: Segmento };
@@ -1304,6 +1351,10 @@ const AdminPage: React.FC = () => {
     const handleApproveRequest = (user: User) => {
         setModalState({ isOpen: true, type: 'approve-user', user });
     };
+
+    const handleRejectRequest = (user: User) => {
+        setModalState({ isOpen: true, type: 'reject-user', user });
+    };
     
     // Segment Modals
     const openAddSegmentoModal = (name: string) => setModalState({ isOpen: true, type: 'add-segmento', name });
@@ -1336,8 +1387,7 @@ const AdminPage: React.FC = () => {
                 resultType = 'error';
             } finally {
                 setIsSubmitting(false);
-                setNotification({ message: resultMessage, type: resultType });
-                setTimeout(() => setNotification(null), 3500);
+                setApiMessage({ text: resultMessage, type: resultType });
             }
         };
 
@@ -1378,6 +1428,15 @@ const AdminPage: React.FC = () => {
                     if (result.success && fetchApprovedUsersLogs) {
                         await fetchApprovedUsersLogs();
                         await fetchPendingUsers();
+                    }
+                    return result;
+                });
+                break;
+            case 'reject-user':
+                await commonAction(async () => {
+                    const result = await rejectUser(modalState.user);
+                    if (result.success) {
+                        await fetchPendingUsers(); // Refetch the list after rejection
                     }
                     return result;
                 });
@@ -1535,6 +1594,13 @@ const AdminPage: React.FC = () => {
                     confirmButtonText: 'Confirmar Aprovação',
                     confirmButtonClass: 'bg-green-600 hover:bg-green-700'
                 };
+            case 'reject-user':
+                 return {
+                    title: 'Confirmar Rejeição de Cadastro',
+                    children: <p>Tem certeza que deseja rejeitar o cadastro de <strong>{modalState.user.name}</strong> da empresa <strong>{modalState.user.companyName}</strong>? Esta ação é irreversível.</p>,
+                    confirmButtonText: 'Confirmar Rejeição',
+                    confirmButtonClass: 'bg-red-600 hover:bg-red-700'
+                };
             case 'add-segmento':
                 return {
                     title: 'Confirmar Adição de Segmento',
@@ -1639,11 +1705,7 @@ const AdminPage: React.FC = () => {
     return (
         <>
             {isSubmitting && <FullScreenLoader />}
-             {notification && (
-                <div className={`fixed bottom-5 right-5 text-white py-3 px-5 rounded-lg shadow-lg z-[100] toast-notification ${notification.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
-                    {notification.message}
-                </div>
-            )}
+            <ApiMessageModal message={apiMessage} onClose={() => setApiMessage(null)} />
             <div className="container mx-auto">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                     <h1 className="text-2xl sm:text-3xl font-bold">Painel do Administrador</h1>
@@ -1663,7 +1725,7 @@ const AdminPage: React.FC = () => {
                 {activeView === 'painel' ? (
                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
                         <div className="space-y-8">
-                            <PendingApprovals onApproveRequest={handleApproveRequest} />
+                            <PendingApprovals onApproveRequest={handleApproveRequest} onRejectRequest={handleRejectRequest} />
                             <AdminUserManager 
                                admins={apiAdmins} 
                                isLoading={isLoadingAdmins}

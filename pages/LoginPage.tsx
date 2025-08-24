@@ -26,6 +26,51 @@ const UploadIcon: React.FC = () => (
     </svg>
 );
 
+const CheckCircleIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+    </svg>
+);
+const XCircleIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+    </svg>
+);
+
+const ApiMessageModal: React.FC<{
+    message: { type: 'success' | 'error', text: string } | null;
+    onClose: () => void;
+}> = ({ message, onClose }) => {
+    if (!message) return null;
+
+    const isSuccess = message.type === 'success';
+    const iconColor = isSuccess ? 'text-green-400' : 'text-red-400';
+    const buttonClass = isSuccess ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700';
+    const Icon = isSuccess ? CheckCircleIcon : XCircleIcon;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-75 z-[70] flex justify-center items-center p-4">
+            <div className="bg-dark-card rounded-xl shadow-2xl p-6 w-full max-w-md text-center border border-dark-border">
+                <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full ${isSuccess ? 'bg-green-100' : 'bg-red-100'}`}>
+                    <Icon className={`h-8 w-8 ${iconColor}`} />
+                </div>
+                <h3 className="text-xl font-bold mt-4 mb-2 text-dark-text">{isSuccess ? 'Sucesso!' : 'Erro!'}</h3>
+                <div className="mb-6 text-gray-300">
+                    <p>{message.text}</p>
+                </div>
+                <div className="flex justify-center">
+                    <button
+                        onClick={onClose}
+                        className={`px-6 py-2 rounded-md text-base font-medium text-white transition-colors ${buttonClass}`}
+                    >
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const brazilianStates = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
 ];
@@ -49,6 +94,7 @@ const LoginPage: React.FC = () => {
     const [birthYear, setBirthYear] = useState('');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [apiMessage, setApiMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
     
     // Company fields
     const [companyName, setCompanyName] = useState('');
@@ -328,16 +374,13 @@ const LoginPage: React.FC = () => {
             }
             const birthDate = `${birthDay}/${birthMonth}/${birthYear}`;
             setIsRegistering(true);
-            const registerPromise = register(name, companyName, email, password, phone, companyLogo, estado, cidade, bairro, birthDate, segmento);
-            const timerPromise = new Promise(resolve => setTimeout(resolve, 3000));
-            const [result] = await Promise.all([registerPromise, timerPromise]);
+            const result = await register(name, companyName, email, password, phone, companyLogo, estado, cidade, bairro, birthDate, segmento);
             setIsRegistering(false);
 
             if (result && result.success) {
-                handleViewChange('login');
-                setSuccess(result.message || 'Cadastro realizado! Aguarde a aprovação do administrador para acessar.');
+                setApiMessage({ type: 'success', text: result.message || 'Cadastro realizado! Aguarde a aprovação do administrador para acessar.' });
             } else {
-                setError(result?.message || 'Falha no cadastro. Tente novamente.');
+                setApiMessage({ type: 'error', text: result?.message || 'Falha no cadastro. Tente novamente.' });
             }
         } else if (view === 'register-employee') {
             if (password !== confirmPassword) {
@@ -350,16 +393,13 @@ const LoginPage: React.FC = () => {
             }
             const birthDate = `${birthDay}/${birthMonth}/${birthYear}`;
             setIsRegistering(true);
-            const registerPromise = registerEmployee(name, phone, email, password, companyCode, photo, estado, cidade, bairro, birthDate);
-            const timerPromise = new Promise(resolve => setTimeout(resolve, 3000));
-            const [result] = await Promise.all([registerPromise, timerPromise]);
+            const result = await registerEmployee(name, phone, email, password, companyCode, photo, estado, cidade, bairro, birthDate);
             setIsRegistering(false);
 
             if (result && result.success) {
-                handleViewChange('login');
-                setSuccess(result.message || 'Sua solicitação foi encaminhada à diretoria da Triad3 Inteligência Digital. Em breve, você receberá uma resposta pelo WhatsApp!');
+                setApiMessage({ type: 'success', text: result.message || 'Sua solicitação foi encaminhada à diretoria da Triad3 Inteligência Digital. Em breve, você receberá uma resposta pelo WhatsApp!' });
             } else {
-                setError(result?.message || 'Falha no cadastro de funcionário. Tente novamente.');
+                setApiMessage({ type: 'error', text: result?.message || 'Falha no cadastro de funcionário. Tente novamente.' });
             }
         }
     };
@@ -733,6 +773,15 @@ const LoginPage: React.FC = () => {
 
     return (
         <div className="bg-dark-background text-dark-text min-h-screen font-sans flex flex-col justify-center items-center p-4 transition-colors duration-300 relative">
+            <ApiMessageModal
+                message={apiMessage}
+                onClose={() => {
+                    if (apiMessage?.type === 'success') {
+                        handleViewChange('login');
+                    }
+                    setApiMessage(null);
+                }}
+            />
             <div className="text-center mb-8">
                  <img src="https://aisfizoyfpcisykarrnt.supabase.co/storage/v1/object/public/imagens/LOGO%20TRIAD3%20.png" alt="Logo Triad3" className="login-logo" />
                  <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold">
